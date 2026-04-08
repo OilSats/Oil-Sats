@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Oil Sats - M70S+ Own Gas</title>
+  <title>Oil Sats - M70S+ Own Gas (AECO)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: 'Inter', system_ui, sans-serif; }
@@ -23,7 +23,6 @@
       .widget-value { font-size: 2.4rem; }
     }
 
-    /* Custom Tooltip Styles */
     .widget-card {
       position: relative;
     }
@@ -54,16 +53,9 @@
       opacity: 1;
     }
 
-    /* Touch support for iPhone */
     @media (hover: none) {
-      .widget-card .tooltip {
-        visibility: hidden;
-      }
-      
-      .widget-card:active .tooltip {
-        visibility: visible;
-        opacity: 1;
-      }
+      .widget-card .tooltip { visibility: hidden; }
+      .widget-card:active .tooltip { visibility: visible; opacity: 1; }
     }
   </style>
 </head>
@@ -84,7 +76,7 @@
 
     let previousValues = {
       "WTI_USD": 94,
-      "NATURAL_GAS_USD": 3.5
+      "AECO_CAD": 2.8     // fallback AECO price in CAD/GJ
     };
 
     const GAS_VOLUME_M3_PER_DAY = 20000;
@@ -129,51 +121,52 @@
           }
         }
       } catch (e) {}
-      return previousValues[code] || (code.includes("GAS") ? 3.5 : 93);
+      return previousValues[code] || (code === "AECO_CAD" ? 2.8 : 94);
     }
 
     function satsPerBbl(oilUsd) {
       return btcPrice > 0 ? Math.round((oilUsd / btcPrice) * 100000000) : 0;
     }
 
-    function satsPerMMBtuOwnGas() {
+    // AECO is in CAD/GJ — we calculate SATS per GJ directly
+    function satsPerGJ_AECO(aecoCadPerGJ) {
       const dailyKwh = M70S_POWER_KW * 24;
-      const kwhPerMMBtu = 293.071;
-      const mmbtuPerDay = dailyKwh / kwhPerMMBtu;
+      const kwhPerGJ = 293.071 / 1.05506;   // approx 277.8 kWh per GJ
+      const gjPerDay = dailyKwh / kwhPerGJ;
+
       const dailySats = dailySatsMinedPerUnit(true);
-      return Math.round(dailySats / mmbtuPerDay);
+      return Math.round(dailySats / gjPerDay);
     }
 
-    function miningPremium(ngPriceUsd) {
-      const ownGasSats = satsPerMMBtuOwnGas();
-      const gasSats = satsPerBbl(ngPriceUsd);
+    function miningPremium(aecoCadPerGJ) {
+      const ownGasSats = satsPerGJ_AECO(aecoCadPerGJ);
+      const gasSats = satsPerBbl(aecoCadPerGJ);   // approximate conversion
       return gasSats > 0 ? (ownGasSats / gasSats).toFixed(1) : "0";
     }
 
     function getSetupMetrics() {
       const m3PerDay = GAS_VOLUME_M3_PER_DAY;
-      const m3PerMMBtu = 28.3;
-      const mmbtuPerDay = m3PerDay / m3PerMMBtu;
+      const m3PerGJ = 0.0353;                    // rough conversion (1 m³ ≈ 0.0353 GJ)
+      const gjPerDay = m3PerDay * m3PerGJ;
 
-      const satsPerMMBtu = satsPerMMBtuOwnGas();
-      const totalDailySatsNow = Math.round(satsPerMMBtu * mmbtuPerDay);
-      const totalDailySatsPostHalving = Math.round((satsPerMMBtu / 2) * mmbtuPerDay);
+      const satsPerGJ = satsPerGJ_AECO(previousValues["AECO_CAD"]);
+      const totalDailySatsNow = Math.round(satsPerGJ * gjPerDay);
+      const totalDailySatsPostHalving = Math.round((satsPerGJ / 2) * gjPerDay);
 
-      const baseCapexUSD = 12000000;
-      const soundMitigationUSD = 2800000;
-      const totalInvestmentUSD = baseCapexUSD + soundMitigationUSD;
+      const baseCapexCAD = 16500000;         // ~$12M USD → CAD
+      const soundMitigationCAD = 3850000;    // ~$2.8M USD → CAD
+      const totalInvestmentCAD = baseCapexCAD + soundMitigationCAD;
 
       const dailyRevenueUSD = (totalDailySatsNow / 100000000) * btcPrice;
-      const paybackDays = Math.round(totalInvestmentUSD / dailyRevenueUSD);
+      const paybackDays = Math.round(totalInvestmentCAD / (dailyRevenueUSD * 1.39)); // rough USD to CAD
       const paybackMonths = (paybackDays / 30).toFixed(1);
 
       return {
         totalDailySatsNow,
         totalDailySatsPostHalving,
-        baseInvestment: baseCapexUSD,
-        soundMitigation: soundMitigationUSD,
-        totalInvestment: totalInvestmentUSD,
-        dailyRevenueUSD: Math.round(dailyRevenueUSD),
+        baseInvestment: baseCapexCAD,
+        soundMitigation: soundMitigationCAD,
+        totalInvestment: totalInvestmentCAD,
         paybackMonths
       };
     }
@@ -182,34 +175,25 @@
       return (num || 0).toLocaleString('en-US');
     }
 
-    function formatUSD(num) {
-      return '$' + num.toLocaleString('en-US');
+    function formatCAD(num) {
+      return 'C$' + num.toLocaleString('en-US');
     }
 
     function createWidgets() {
       const metrics = getSetupMetrics();
+      const aecoPrice = previousValues["AECO_CAD"];
 
       const items = [
-        { code: "WTI_USD", label: "WTI", color: "emerald", value: formatNumber(satsPerBbl(previousValues["WTI_USD"] || 94)), 
-          tooltip: `Current BTC Price: $${btcPrice.toLocaleString()}` },
-        { code: "NATURAL_GAS_USD", label: "Nat Gas", color: "amber", value: formatNumber(satsPerBbl(previousValues["NATURAL_GAS_USD"])), 
-          tooltip: `Value of selling raw natural gas` },
-        { code: "M70S_OWN", label: "M70S+ Own Gas", color: "sky", value: formatNumber(satsPerMMBtuOwnGas()), 
-          tooltip: `Revenue using own stranded gas (zero marginal gas cost)` },
-        { code: "PREMIUM", label: "Mining Premium", color: "violet", value: miningPremium(previousValues["NATURAL_GAS_USD"]), 
-          tooltip: `How many times more profitable mining is vs selling gas raw` },
-        { code: "DAILY_SATS", label: "Daily Sats (Now)", color: "cyan", value: formatNumber(metrics.totalDailySatsNow), 
-          tooltip: `Total Bitcoin sats earned per day from 20,000 m³ gas` },
-        { code: "DAILY_SATS_HALVING", label: "Daily Sats (Post 2028)", color: "purple", value: formatNumber(metrics.totalDailySatsPostHalving), 
-          tooltip: `Estimated daily sats after the 2028 Bitcoin halving` },
-        { code: "INVESTMENT", label: "Base Investment", color: "rose", value: formatUSD(metrics.baseInvestment), 
-          tooltip: `$12M for ASICs, generators, and infrastructure` },
-        { code: "SOUND", label: "Sound Mitigation", color: "orange", value: formatUSD(metrics.soundMitigation), 
-          tooltip: `Cost to reduce noise to ~40 dBA (residential friendly)` },
-        { code: "TOTAL_INVEST", label: "Total Investment", color: "red", value: formatUSD(metrics.totalInvestment), 
-          tooltip: `Base + Sound Mitigation = $14.8 million` },
-        { code: "PAYBACK", label: "Payback Period", color: "lime", value: metrics.paybackMonths + " months", 
-          tooltip: `Time to recover total investment at current BTC price` }
+        { code: "WTI_USD", label: "WTI", color: "emerald", value: formatNumber(satsPerBbl(previousValues["WTI_USD"] || 94)), unit: "SATS / bbl", tooltip: `WTI Price: $${(previousValues["WTI_USD"] || 94).toFixed(2)} USD/bbl` },
+        { code: "AECO_CAD", label: "AECO Alberta", color: "amber", value: formatNumber(satsPerGJ_AECO(aecoPrice)), unit: "SATS / GJ", tooltip: `AECO Price: C$${aecoPrice.toFixed(2)} per GJ` },
+        { code: "M70S_OWN", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_AECO(aecoPrice)), unit: "SATS / GJ", tooltip: "Revenue per GJ of own stranded Alberta gas (zero marginal cost)" },
+        { code: "PREMIUM", label: "Mining Premium", color: "violet", value: miningPremium(aecoPrice), unit: "×", tooltip: "How many times more profitable mining is vs selling raw AECO gas" },
+        { code: "DAILY_SATS", label: "Daily Sats (Now)", color: "cyan", value: formatNumber(metrics.totalDailySatsNow), unit: "SATS / DAY", tooltip: `Total sats earned per day from 20 e³m³/d` },
+        { code: "DAILY_SATS_HALVING", label: "Daily Sats (Post 2028)", color: "purple", value: formatNumber(metrics.totalDailySatsPostHalving), unit: "SATS / DAY", tooltip: "Estimated daily sats after the 2028 Bitcoin halving" },
+        { code: "INVESTMENT", label: "Base Investment", color: "rose", value: formatCAD(metrics.baseInvestment), unit: "CAD", tooltip: "C$16.5 million for ASICs, generators & infrastructure" },
+        { code: "SOUND", label: "Sound Mitigation", color: "orange", value: formatCAD(metrics.soundMitigation), unit: "CAD", tooltip: "Cost to reduce noise to ~40 dBA" },
+        { code: "TOTAL_INVEST", label: "Total Investment", color: "red", value: formatCAD(metrics.totalInvestment), unit: "CAD", tooltip: "Total capital required (incl. sound mitigation)" },
+        { code: "PAYBACK", label: "Payback Period", color: "lime", value: metrics.paybackMonths + " months", unit: "", tooltip: `Time to recover total investment at current prices` }
       ];
 
       const container = document.getElementById("cards");
@@ -223,8 +207,6 @@
           <div class="uppercase tracking-widest text-xs sm:text-sm font-medium text-${item.color}-400">${item.label}</div>
           <div id="val-${item.code}" class="widget-value mt-4 sm:mt-6 text-white">${item.value}</div>
           <div class="text-xs text-gray-400 mt-2">${item.unit}</div>
-          
-          <!-- Custom Tooltip -->
           <div class="tooltip">${item.tooltip}</div>
         `;
         container.appendChild(card);
@@ -237,24 +219,24 @@
       const now = Date.now();
       const shouldUpdateOil = (now - lastOilUpdate) > 300000;
 
-      const ngPrice = shouldUpdateOil ? await getCurrentOilPrice("NATURAL_GAS_USD") : previousValues["NATURAL_GAS_USD"];
+      const aecoPrice = shouldUpdateOil ? await getCurrentOilPrice("AECO_CAD") : previousValues["AECO_CAD"];
       const wtiPrice = shouldUpdateOil ? await getCurrentOilPrice("WTI_USD") : previousValues["WTI_USD"];
 
-      previousValues["NATURAL_GAS_USD"] = ngPrice;
+      previousValues["AECO_CAD"] = aecoPrice;
       previousValues["WTI_USD"] = wtiPrice;
 
       const metrics = getSetupMetrics();
 
       const updates = {
         "WTI_USD": formatNumber(satsPerBbl(wtiPrice)),
-        "NATURAL_GAS_USD": formatNumber(satsPerBbl(ngPrice)),
-        "M70S_OWN": formatNumber(satsPerMMBtuOwnGas()),
-        "PREMIUM": miningPremium(ngPrice),
+        "AECO_CAD": formatNumber(satsPerGJ_AECO(aecoPrice)),
+        "M70S_OWN": formatNumber(satsPerGJ_AECO(aecoPrice)),
+        "PREMIUM": miningPremium(aecoPrice),
         "DAILY_SATS": formatNumber(metrics.totalDailySatsNow),
         "DAILY_SATS_HALVING": formatNumber(metrics.totalDailySatsPostHalving),
-        "INVESTMENT": formatUSD(metrics.baseInvestment),
-        "SOUND": formatUSD(metrics.soundMitigation),
-        "TOTAL_INVEST": formatUSD(metrics.totalInvestment),
+        "INVESTMENT": formatCAD(metrics.baseInvestment),
+        "SOUND": formatCAD(metrics.soundMitigation),
+        "TOTAL_INVEST": formatCAD(metrics.totalInvestment),
         "PAYBACK": metrics.paybackMonths + " months"
       };
 
