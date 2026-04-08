@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Oil Sats Treasury</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+  <style>
+    body { font-family: 'Inter', system_ui, sans-serif; }
+    .price { font-size: 3.5rem; line-height: 1; }
+  </style>
+</head>
+<body class="bg-[#0a0a0a] text-white min-h-screen">
+  <div class="max-w-5xl mx-auto px-6 py-8">
+    <!-- Header (Strive-style) -->
+    <div class="flex justify-between items-center mb-12 border-b border-gray-800 pb-6">
+      <div class="flex items-center gap-3">
+        <i class="fa-solid fa-oil-can text-3xl text-amber-400"></i>
+        <h1 class="text-3xl font-semibold tracking-tight">Oil Sats Treasury</h1>
+      </div>
+      <div class="flex items-center gap-6 text-sm">
+        <button onclick="refreshAll()" class="flex items-center gap-2 hover:text-amber-400 transition">
+          <i class="fa-solid fa-rotate"></i> Refresh
+        </button>
+        <a href="https://treasury.strive.com" target="_blank" class="text-gray-400 hover:text-white">Inspired by Strive</a>
+      </div>
+    </div>
+
+    <!-- Price Widgets -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="cards">
+      <!-- Cards populated by JS -->
+    </div>
+
+    <div class="text-center text-xs text-gray-500 mt-12">
+      Data from CoinGecko + OilPriceAPI • Updates every 60s • 1 BTC = 100,000,000 sats
+    </div>
+  </div>
+
+  <script>
+    const API_KEY = "YOUR_OILPRICEAPI_KEY_HERE";   // ← PASTE YOUR KEY HERE
+    let btcPrice = 0;
+
+    async function getBTC() {
+      try {
+        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
+        const data = await res.json();
+        btcPrice = data.bitcoin.usd;
+      } catch(e) { console.log("BTC fetch error"); }
+    }
+
+    async function getOilPrice(code) {
+      if (!API_KEY || API_KEY === "YOUR_OILPRICEAPI_KEY_HERE") {
+        return { price: 85, name: code }; // fallback demo
+      }
+      try {
+        const res = await fetch(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}_USD&api_key=${API_KEY}`);
+        const data = await res.json();
+        return data.data || { price: 0 };
+      } catch(e) {
+        console.log("Oil fetch error for", code);
+        return { price: 0 };
+      }
+    }
+
+    function satsPerBbl(oilUsd) {
+      if (!btcPrice || btcPrice === 0) return 0;
+      return Math.round((oilUsd / btcPrice) * 100000000);
+    }
+
+    function formatNumber(num) {
+      return num.toLocaleString('en-US');
+    }
+
+    async function renderCards() {
+      await getBTC();
+      
+      const oils = [
+        { code: "WTI", label: "WTI", color: "emerald" },
+        { code: "BRENT", label: "Brent", color: "blue" },
+        { code: "WCS", label: "WCS", color: "amber" }
+      ];
+
+      const container = document.getElementById("cards");
+      container.innerHTML = "";
+
+      for (const oil of oils) {
+        const oilData = await getOilPrice(oil.code);
+        const usdPrice = oilData.price || 0;
+        const sats = satsPerBbl(usdPrice);
+
+        const cardHTML = `
+          <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${oil.color}-400 transition-all">
+            <div class="flex justify-between items-start">
+              <div>
+                <div class="flex items-center gap-2 text-${oil.color}-400">
+                  <i class="fa-solid fa-oil-can"></i>
+                  <span class="uppercase tracking-widest text-sm font-medium">${oil.label}</span>
+                </div>
+                <div class="mt-6 price font-mono font-semibold text-white">${formatNumber(sats)}</div>
+                <div class="text-xs text-gray-400 mt-1">SATS / barrel</div>
+              </div>
+              <div class="text-right">
+                <div class="text-2xl font-medium">$${usdPrice.toFixed(2)}</div>
+                <div class="text-xs text-gray-400">USD / barrel</div>
+              </div>
+            </div>
+            <div class="mt-8 text-xs text-gray-500 flex justify-between">
+              <span>Last updated just now</span>
+              <span class="font-mono">${btcPrice ? btcPrice.toLocaleString() + ' USD/BTC' : ''}</span>
+            </div>
+          </div>`;
+        container.innerHTML += cardHTML;
+      }
+    }
+
+    async function refreshAll() {
+      const btns = document.querySelectorAll("button");
+      btns.forEach(b => b.disabled = true);
+      await renderCards();
+      btns.forEach(b => b.disabled = false);
+    }
+
+    // Initial load + auto-refresh
+    renderCards();
+    setInterval(renderCards, 60000);   // every 60 seconds
+  </script>
+</body>
+</html>
