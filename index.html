@@ -11,7 +11,7 @@
     .price { font-size: 3.6rem; line-height: 1; }
     .chart-container { height: 480px; }
 
-    /* Saylor GIF styling - fixed on sides */
+    /* Saylor GIF styling */
     .saylor-gif {
       position: fixed;
       top: 50%;
@@ -28,7 +28,7 @@
     .saylor-right { right: 20px; }
 
     @media (max-width: 1024px) {
-      .saylor-gif { display: none; } /* Hide on smaller screens */
+      .saylor-gif { display: none; }
     }
   </style>
 </head>
@@ -190,15 +190,19 @@
         getPastMonthPrices("WCS_CRUDE_USD")
       ]);
 
-      const labels = wtiHistory.length ? 
-        wtiHistory.map(h => {
-          const d = h.date;
-          return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
-        }) : [];
+      let labels = [];
+      let wtiSats = [], brentSats = [], wcsSats = [];
 
-      const wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
-      const brentSats = brentHistory.map(h => satsPerBbl(h.price));
-      const wcsSats = wcsHistory.map(h => satsPerBbl(h.price));
+      if (wtiHistory.length > 0) {
+        labels = wtiHistory.map(h => {
+          const d = h.date;
+          return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        });
+
+        wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
+        brentSats = brentHistory.map(h => satsPerBbl(h.price));
+        wcsSats = wcsHistory.map(h => satsPerBbl(h.price));
+      }
 
       if (chartInstance) chartInstance.destroy();
 
@@ -228,8 +232,22 @@
             }
           },
           scales: {
-            y: { grid: { color: '#333' }, ticks: { color: '#888', callback: v => v.toLocaleString() } },
-            x: { grid: { color: '#333' }, ticks: { color: '#888', maxTicksLimit: 12 } }
+            y: { 
+              grid: { color: '#333' }, 
+              ticks: { color: '#888', callback: v => v.toLocaleString() } 
+            },
+            x: { 
+              grid: { color: '#333' }, 
+              ticks: { 
+                color: '#888', 
+                maxTicksLimit: 6,           // ~ weekly for 30 days
+                maxRotation: 0,
+                minRotation: 0,
+                callback: function(value, index) {
+                  return this.getLabelForValue(value);
+                }
+              }
+            }
           }
         }
       });
