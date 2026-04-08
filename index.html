@@ -35,6 +35,12 @@
     let chartInstance = null;
     let lastOilUpdate = 0;
 
+    // Cache previous values to prevent flashing to 0
+    let previousValues = {
+      "WTI_USD": 0,
+      "NATURAL_GAS_USD": 0
+    };
+
     async function getBTC() {
       try {
         const coingeckoUrl = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd";
@@ -58,10 +64,14 @@
         });
         if (res.ok) {
           const json = await res.json();
-          if (json.data && json.data.price) return parseFloat(json.data.price);
+          if (json.data && json.data.price) {
+            const price = parseFloat(json.data.price);
+            previousValues[code] = price;
+            return price;
+          }
         }
       } catch (e) {}
-      return code.includes("GAS") ? 3.5 : 93; // fallback
+      return previousValues[code] || (code.includes("GAS") ? 3.5 : 93);
     }
 
     async function getPastMonthPrices(code) {
@@ -108,7 +118,7 @@
         card.title = `${item.label} — updates every 5 min`;
         card.innerHTML = `
           <div class="uppercase tracking-widest text-sm font-medium text-${item.color}-400">${item.label}</div>
-          <div id="sats-${item.code}" class="mt-6 price font-mono font-semibold text-white">0</div>
+          <div id="sats-${item.code}" class="mt-6 price font-mono font-semibold text-white">${formatNumber(previousValues[item.code] ? satsPerBbl(previousValues[item.code]) : 0)}</div>
           <div class="text-xs text-gray-400 mt-1">${item.unit}</div>
         `;
         container.appendChild(card);
@@ -127,7 +137,7 @@
       ];
 
       for (const item of items) {
-        const usdPrice = shouldUpdateOil ? await getCurrentOilPrice(item.code) : 0;
+        const usdPrice = shouldUpdateOil ? await getCurrentOilPrice(item.code) : previousValues[item.code];
         const sats = satsPerBbl(usdPrice);
 
         const satsEl = document.getElementById(`sats-${item.code}`);
@@ -151,7 +161,7 @@
       if (wtiHistory.length > 0) {
         labels = wtiHistory.map(h => {
           const d = h.date;
-          return isNaN(d.getTime()) ? '' : String(d.getDate()).padStart(2, '0');   // Only DD
+          return isNaN(d.getTime()) ? '' : String(d.getDate()).padStart(2, '0'); // Only DD
         });
 
         wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
@@ -204,13 +214,31 @@
               type: 'linear',
               position: 'left',
               grid: { color: '#333' },
-              ticks: { color: '#888', callback: v => v.toLocaleString() }
+              ticks: { 
+                color: '#888', 
+                callback: v => v.toLocaleString() 
+              },
+              title: {
+                display: true,
+                text: 'SATS / barrel',
+                color: '#10b981',
+                font: { size: 13 }
+              }
             },
             y1: {
               type: 'linear',
               position: 'right',
               grid: { drawOnChartArea: false },
-              ticks: { color: '#888', callback: v => v.toLocaleString() }
+              ticks: { 
+                color: '#888', 
+                callback: v => v.toLocaleString() 
+              },
+              title: {
+                display: true,
+                text: 'SATS / mmbtu',
+                color: '#f59e0b',
+                font: { size: 13 }
+              }
             }
           },
           plugins: {
