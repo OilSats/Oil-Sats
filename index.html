@@ -33,36 +33,57 @@
     let btcPrice = 71500;
     let chartInstance = null;
 
+    // Reliable BTC fetch (corsproxy.io is much more stable than allorigins)
     async function getBTC() {
       try {
-        const res = await fetch("https://api.allorigins.win/get?url=" + encodeURIComponent("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"));
-        const proxy = await res.json();
-        const data = JSON.parse(proxy.contents);
-        btcPrice = data.bitcoin?.usd || 71500;
-      } catch(e) { 
-        console.error("BTC fetch failed"); 
+        const coingeckoUrl = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd";
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(coingeckoUrl)}`;
+        
+        const res = await fetch(proxyUrl);
+        if (!res.ok) throw new Error("Proxy failed");
+        
+        const data = await res.json();
+        btcPrice = data.bitcoin?.usd || btcPrice;
+        return btcPrice;
+      } catch (e) {
+        console.warn("BTC fetch failed, using cached price:", btcPrice);
+        return btcPrice;
       }
     }
 
     async function getCurrentOilPrice(code) {
       try {
-        const res = await fetch(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}_USD`, {
-          headers: { "Authorization": `Token ${OIL_API_KEY}` }
+        const res = await fetch(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}`, {
+          headers: { 
+            "Authorization": `Token ${OIL_API_KEY}`,
+            "Content-Type": "application/json"
+          }
         });
+
         if (res.ok) {
           const json = await res.json();
-          if (json.data && json.data.price) return parseFloat(json.data.price);
+          if (json.data && json.data.price) {
+            return parseFloat(json.data.price);
+          }
         }
-      } catch(e) {}
-      const fallbacks = { WTI: 94, BRENT: 96, WCS: 90 };
-      return fallbacks[code.toUpperCase()] || 93;
+      } catch (e) {
+        console.warn(`Current price fetch failed for ${code}`);
+      }
+
+      // Fallbacks
+      const fallbacks = { WTI_USD: 94, BRENT_CRUDE_USD: 96, WCS_CRUDE_USD: 90 };
+      return fallbacks[code] || 93;
     }
 
     async function getPastMonthPrices(code) {
       try {
-        const res = await fetch(`https://api.oilpriceapi.com/v1/prices/past_month?by_code=${code}_USD&interval=1d`, {
-          headers: { "Authorization": `Token ${OIL_API_KEY}` }
+        const res = await fetch(`https://api.oilpriceapi.com/v1/prices/past_month?by_code=${code}&interval=1d`, {
+          headers: { 
+            "Authorization": `Token ${OIL_API_KEY}`,
+            "Content-Type": "application/json"
+          }
         });
+
         if (res.ok) {
           const json = await res.json();
           if (json.data && json.data.prices) {
@@ -72,7 +93,9 @@
             })).reverse();
           }
         }
-      } catch(e) { console.error(`Historical fetch failed for ${code}`); }
+      } catch (e) {
+        console.warn(`Historical fetch failed for ${code}`);
+      }
       return [];
     }
 
@@ -84,29 +107,52 @@
       return num.toLocaleString('en-US');
     }
 
-    async function renderWidgets() {
-      await getBTC();
+    // Build widget cards ONCE on first load
+    function createWidgets() {
       const oils = [
-        { code: "WTI", label: "WTI", color: "emerald" },
-        { code: "BRENT", label: "Brent", color: "blue" },
-        { code: "WCS", label: "WCS", color: "amber" }
+        { code: "WTI_USD",       label: "WTI",    color: "emerald" },
+        { code: "BRENT_CRUDE_USD", label: "Brent",  color: "blue" },
+        { code: "WCS_CRUDE_USD", label: "WCS",    color: "amber" }
       ];
 
       const container = document.getElementById("cards");
       container.innerHTML = "";
 
+      oils.forEach(oil => {
+        const card = document.createElement("div");
+        card.className = `bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${oil.color}-400 transition-all group relative cursor-help`;
+        card.title = `Oil: $XX.XX USD/bbl\nBTC: $XX,XXX USD`; // will be updated
+        card.innerHTML = `
+          <div class="uppercase tracking-widest text-sm font-medium text-${oil.color}-400">${oil.label}</div>
+          <div id="sats-${oil.code}" class="mt-6 price font-mono font-semibold text-white">0</div>
+          <div class="text-xs text-gray-400 mt-1">SATS / bbl</div>
+          <div id="usd-${oil.code}" class="text-sm text-gray-500 mt-4">USD/bbl: $0.00</div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // Update only the numbers (this is what prevents disappearing widgets)
+    async function updateWidgets() {
+      await getBTC();
+
+      const oils = [
+        { code: "WTI_USD",       label: "WTI",    color: "emerald" },
+        { code: "BRENT_CRUDE_USD", label: "Brent",  color: "blue" },
+        { code: "WCS_CRUDE_USD", label: "WCS",    color: "amber" }
+      ];
+
       for (const oil of oils) {
         const usdPrice = await getCurrentOilPrice(oil.code);
         const sats = satsPerBbl(usdPrice);
 
-        const cardHTML = `
-          <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${oil.color}-400 transition-all group relative cursor-help"
-               title="Oil: $${usdPrice.toFixed(2)} USD/bbl\nBTC: $${btcPrice.toLocaleString()} USD">
-            <div class="uppercase tracking-widest text-sm font-medium text-${oil.color}-400">${oil.label}</div>
-            <div class="mt-6 price font-mono font-semibold text-white">${formatNumber(sats)}</div>
-            <div class="text-xs text-gray-400 mt-1">SATS / bbl</div>
-          </div>`;
-        container.innerHTML += cardHTML;
+        // Update SATS
+        const satsEl = document.getElementById(`sats-${oil.code}`);
+        if (satsEl) satsEl.textContent = formatNumber(sats);
+
+        // Update USD price
+        const usdEl = document.getElementById(`usd-${oil.code}`);
+        if (usdEl) usdEl.textContent = `USD/bbl: $${usdPrice.toFixed(2)}`;
       }
     }
 
@@ -114,9 +160,9 @@
       const ctx = document.getElementById('satsChart');
 
       const [wtiHistory, brentHistory, wcsHistory] = await Promise.all([
-        getPastMonthPrices("WTI"),
-        getPastMonthPrices("BRENT"),
-        getPastMonthPrices("WCS")
+        getPastMonthPrices("WTI_USD"),
+        getPastMonthPrices("BRENT_CRUDE_USD"),
+        getPastMonthPrices("WCS_CRUDE_USD")
       ]);
 
       const labels = wtiHistory.map(h => h.date.toLocaleDateString('en-US', {month:'short', day:'numeric'}));
@@ -132,33 +178,9 @@
         data: {
           labels: labels,
           datasets: [
-            { 
-              label: 'WTI', 
-              data: wtiSats, 
-              borderColor: '#10b981', 
-              backgroundColor: 'rgba(16, 185, 129, 0.15)',
-              tension: 0.4,
-              borderWidth: 3.5,
-              pointRadius: 0
-            },
-            { 
-              label: 'Brent', 
-              data: brentSats, 
-              borderColor: '#3b82f6', 
-              backgroundColor: 'rgba(59, 130, 246, 0.15)',
-              tension: 0.4,
-              borderWidth: 3.5,
-              pointRadius: 0
-            },
-            { 
-              label: 'WCS', 
-              data: wcsSats, 
-              borderColor: '#f59e0b', 
-              backgroundColor: 'rgba(245, 158, 11, 0.15)',
-              tension: 0.4,
-              borderWidth: 3.5,
-              pointRadius: 0
-            }
+            { label: 'WTI',   data: wtiSats,   borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.15)', tension: 0.4, borderWidth: 3.5, pointRadius: 0 },
+            { label: 'Brent', data: brentSats, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.15)', tension: 0.4, borderWidth: 3.5, pointRadius: 0 },
+            { label: 'WCS',   data: wcsSats,   borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.15)', tension: 0.4, borderWidth: 3.5, pointRadius: 0 }
           ]
         },
         options: {
@@ -177,31 +199,26 @@
             }
           },
           scales: {
-            y: { 
-              grid: { color: '#333' }, 
-              ticks: { color: '#888', callback: v => v.toLocaleString() } 
-            },
-            x: { 
-              grid: { color: '#333' }, 
-              ticks: { color: '#888', maxTicksLimit: 12 } 
-            }
+            y: { grid: { color: '#333' }, ticks: { color: '#888', callback: v => v.toLocaleString() } },
+            x: { grid: { color: '#333' }, ticks: { color: '#888', maxTicksLimit: 12 } }
           }
         }
       });
     }
 
     async function init() {
-      await renderWidgets();
-      await renderChart();
+      createWidgets();           // Build structure once
+      await updateWidgets();     // Fill in the numbers
+      await renderChart();       // Render chart
     }
 
     // Initial load
     init();
 
-    // Faster BTC + widget updates: every 30 seconds
-    setInterval(renderWidgets, 30000);
+    // Update prices every 30 seconds (only numbers change)
+    setInterval(updateWidgets, 30000);
 
-    // Chart auto-refreshes every 5 minutes (300000 ms)
+    // Refresh chart every 5 minutes
     setInterval(renderChart, 300000);
   </script>
 </body>
