@@ -18,10 +18,7 @@
     @media (max-width: 640px) { .widget-value { font-size: 2.05rem; } }
     @media (min-width: 641px) and (max-width: 1024px) { .widget-value { font-size: 2.35rem; } }
 
-    .widget-card {
-      position: relative;
-    }
-
+    .widget-card { position: relative; }
     .widget-card .tooltip {
       visibility: hidden;
       position: absolute;
@@ -41,7 +38,6 @@
       margin-bottom: 10px;
       white-space: pre-line;
     }
-
     .widget-card:hover .tooltip,
     .widget-card:active .tooltip {
       visibility: visible;
@@ -53,14 +49,14 @@
 
   <div class="max-w-6xl mx-auto px-4 sm:px-6 py-8">
     <div class="text-center text-gray-500 text-xs mb-6">
-      Version 2026-04-09 • Live Prices • AECO + M70S+ • Power Law R² = 0.96
+      Version 2026-04-09 • Live Prices with Fallbacks • AECO + M70S+
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-6" id="cards"></div>
   </div>
 
   <script>
-    // Persistent last known values
+    // Persistent last known values (fallback)
     let btcPrice = 71325;
     let wtiPrice = 94;
     let aecoPrice = 2.80;   // CAD/GJ
@@ -79,47 +75,40 @@
     async function fetchLivePrices() {
       // BTC
       try {
-        const btcRes = await fetch(getProxiedUrl("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"));
-        if (btcRes.ok) {
-          const data = await btcRes.json();
-          if (data.bitcoin?.usd) btcPrice = data.bitcoin.usd;
+        const res = await fetch(getProxiedUrl("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"));
+        if (res.ok) {
+          const data = await res.json();
+          if (data.bitcoin?.usd) btcPrice = Math.round(data.bitcoin.usd);
         }
-      } catch (e) {}
+      } catch (e) { console.log("BTC fetch failed - using last known"); }
 
       // WTI
       try {
-        const wtiRes = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=WTI_USD`), {
+        const res = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=WTI_USD`), {
           headers: { "Authorization": `Token ${OIL_API_KEY}` }
         });
-        if (wtiRes.ok) {
-          const data = await wtiRes.json();
+        if (res.ok) {
+          const data = await res.json();
           if (data.data?.price) wtiPrice = parseFloat(data.data.price);
         }
-      } catch (e) {}
+      } catch (e) { console.log("WTI fetch failed - using last known"); }
 
-      // AECO - trying both common codes
+      // AECO - try multiple codes
       try {
-        let aecoRes = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=AECO`), {
-          headers: { "Authorization": `Token ${OIL_API_KEY}` }
-        });
-        if (!aecoRes.ok) {
-          aecoRes = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=AECO_CAD`), {
+        let codes = ["AECO", "AECO_CAD", "AECO_USD"];
+        for (let code of codes) {
+          const res = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}`), {
             headers: { "Authorization": `Token ${OIL_API_KEY}` }
           });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.data?.price) {
+              aecoPrice = parseFloat(data.data.price);
+              break;
+            }
+          }
         }
-        if (aecoRes.ok) {
-          const data = await aecoRes.json();
-          if (data.data?.price) aecoPrice = parseFloat(data.data.price);
-        }
-      } catch (e) {}
-    }
-
-    function dailySatsMinedPerUnit(scenario, isPostHalving = false) {
-      let base = 475;
-      if (scenario === "bear") base = 400;
-      if (scenario === "bull") base = 550;
-      if (isPostHalving) base = Math.round(base * 0.55);
-      return Math.round(M70S_HASHRATE * base);
+      } catch (e) { console.log("AECO fetch failed - using last known"); }
     }
 
     function satsPerGJ_AECO() {
@@ -130,7 +119,9 @@
       const dailyKwh = M70S_POWER_KW * 24;
       const kwhPerGJ = 277.8;
       const gjPerDay = dailyKwh / kwhPerGJ;
-      const dailySats = dailySatsMinedPerUnit("base", isPostHalving);
+      let base = 475;
+      if (isPostHalving) base = 237.5;
+      const dailySats = Math.round(M70S_HASHRATE * base);
       return Math.round(dailySats / gjPerDay);
     }
 
@@ -159,43 +150,16 @@
       const basePost = getSetupMetrics(true);
       const bullPost = getSetupMetrics(true);
 
-      const premium = (satsPerGJ_Mining(false) / satsPerGJ_AECO()).toFixed(1) || "0";
+      const premium = (satsPerGJ_Mining(false) / satsPerGJ_AECO()).toFixed(1) || "—";
 
       const items = [
-        { code: "WTI", label: "WTI", color: "emerald", 
-          value: formatNumber(Math.round((wtiPrice / btcPrice) * 1e8)), 
-          unit: "SATS / bbl", 
-          tooltip: `WTI: $${wtiPrice.toFixed(2)} / bbl\nBTC: $${btcPrice.toLocaleString()} / BTC` },
-
-        { code: "AECO", label: "AECO Alberta", color: "amber", 
-          value: formatNumber(satsPerGJ_AECO()), 
-          unit: "SATS / GJ", 
-          tooltip: `AECO: C$${aecoPrice.toFixed(2)} / GJ` },
-
-        { code: "MINING", label: "M70S+ Mining Revenue", color: "sky", 
-          value: formatNumber(satsPerGJ_Mining(false)), 
-          unit: "SATS / GJ", 
-          tooltip: "Mining revenue per GJ using own gas" },
-
-        { code: "PREMIUM", label: "Mining Premium", color: "violet", 
-          value: premium, 
-          unit: "×", 
-          tooltip: "Mining vs selling raw AECO gas" },
-
-        { code: "DAILY_NOW", label: "Daily Sats (Now)", color: "cyan", 
-          value: `${formatNumber(bearNow.totalDailySats)} / ${formatNumber(baseNow.totalDailySats)} / ${formatNumber(bullNow.totalDailySats)}`, 
-          unit: "Bear / Base / Bull", 
-          tooltip: "Pre-halving" },
-
-        { code: "PAYBACK", label: "Payback Period", color: "lime", 
-          value: `${bearNow.paybackMonths} / ${baseNow.paybackMonths} / ${bullNow.paybackMonths}`, 
-          unit: "Bear / Base / Bull (months)", 
-          tooltip: `Time to recover C$${TOTAL_INVEST_CAD.toLocaleString()} at $${btcPrice.toLocaleString()} USD/BTC` },
-
-        { code: "DAILY_POST", label: "Daily Sats (Post 2028)", color: "purple", 
-          value: `${formatNumber(bearPost.totalDailySats)} / ${formatNumber(basePost.totalDailySats)} / ${formatNumber(bullPost.totalDailySats)}`, 
-          unit: "Bear / Base / Bull", 
-          tooltip: "After 2028 halving" }
+        { code: "WTI", label: "WTI", color: "emerald", value: formatNumber(Math.round((wtiPrice / btcPrice) * 1e8)), unit: "SATS / bbl", tooltip: `WTI: $${wtiPrice.toFixed(2)} / bbl\nBTC: $${btcPrice.toLocaleString()} / BTC` },
+        { code: "AECO", label: "AECO Alberta", color: "amber", value: formatNumber(satsPerGJ_AECO()), unit: "SATS / GJ", tooltip: `AECO: C$${aecoPrice.toFixed(2)} / GJ` },
+        { code: "MINING", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_Mining(false)), unit: "SATS / GJ", tooltip: "Mining revenue per GJ using own gas" },
+        { code: "PREMIUM", label: "Mining Premium", color: "violet", value: premium, unit: "×", tooltip: "Mining vs selling raw AECO gas" },
+        { code: "DAILY_NOW", label: "Daily Sats (Now)", color: "cyan", value: `${formatNumber(bearNow.totalDailySats)} / ${formatNumber(baseNow.totalDailySats)} / ${formatNumber(bullNow.totalDailySats)}`, unit: "Bear / Base / Bull", tooltip: "Pre-halving" },
+        { code: "PAYBACK", label: "Payback Period", color: "lime", value: `${bearNow.paybackMonths} / ${baseNow.paybackMonths} / ${bullNow.paybackMonths}`, unit: "Bear / Base / Bull (months)", tooltip: `Time to recover C$${TOTAL_INVEST_CAD.toLocaleString()} at $${btcPrice.toLocaleString()} USD/BTC` },
+        { code: "DAILY_POST", label: "Daily Sats (Post 2028)", color: "purple", value: `${formatNumber(bearPost.totalDailySats)} / ${formatNumber(basePost.totalDailySats)} / ${formatNumber(bullPost.totalDailySats)}`, unit: "Bear / Base / Bull", tooltip: "After 2028 halving" }
       ];
 
       const container = document.getElementById("cards");
