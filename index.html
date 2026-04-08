@@ -15,13 +15,27 @@
     <!-- Header -->
     <div class="flex justify-between items-center mb-12 border-b border-gray-800 pb-6">
       <div class="flex items-center gap-4">
-        <!-- Stable Logo -->
-        <img 
-          src="https://i.ibb.co/0jK7vL2/oil-sats-logo.png" 
-          alt="Oil Sats Logo" 
-          class="w-16 h-16 object-contain"
-          onerror="this.src='https://via.placeholder.com/64/amber/111?text=OS';"
-        >
+        <!-- Clean SVG Logo: Oil Drum with Bitcoin Symbol -->
+        <svg width="68" height="68" viewBox="0 0 68 68" fill="none" xmlns="http://www.w3.org/2000/svg" class="flex-shrink-0">
+          <!-- Oil Drum Body -->
+          <rect x="12" y="18" width="44" height="42" rx="4" fill="#444444" stroke="#666666" stroke-width="6"/>
+          <!-- Drum Ribs -->
+          <rect x="16" y="26" width="36" height="4" fill="#555555"/>
+          <rect x="16" y="36" width="36" height="4" fill="#555555"/>
+          <rect x="16" y="46" width="36" height="4" fill="#555555"/>
+          <!-- Drum Lid -->
+          <rect x="18" y="14" width="32" height="8" rx="2" fill="#555555" stroke="#777777" stroke-width="4"/>
+          <!-- Bitcoin Logo (large orange gradient ₿) -->
+          <text x="34" y="48" font-size="32" font-weight="900" text-anchor="middle" dominant-baseline="middle" fill="url(#btcGradient)">₿</text>
+          <!-- Gradient Definition -->
+          <defs>
+            <linearGradient id="btcGradient" x1="20%" y1="20%" x2="80%" y2="80%" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#F7931A"/>
+              <stop offset="100%" stop-color="#FFBB33"/>
+            </linearGradient>
+          </defs>
+        </svg>
+
         <h1 class="text-3xl font-semibold tracking-tight">Oil Sats</h1>
       </div>
       <button onclick="refreshAll()" class="flex items-center gap-2 hover:text-amber-400 transition-colors text-sm">
@@ -40,11 +54,10 @@
   <script>
     const OIL_API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a";
 
-    let btcPrice = 71500; // fallback
+    let btcPrice = 71500;
 
     async function getBTC() {
       try {
-        // Use a CORS-friendly proxy for CoinGecko
         const res = await fetch("https://api.allorigins.win/get?url=" + encodeURIComponent("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"));
         const proxyData = await res.json();
         const data = JSON.parse(proxyData.contents);
@@ -57,22 +70,18 @@
     async function getOilPrice(code) {
       try {
         const res = await fetch(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}_USD`, {
-          headers: {
-            "Authorization": `Token ${OIL_API_KEY}`
-          }
+          headers: { "Authorization": `Token ${OIL_API_KEY}` }
         });
-
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        const json = await res.json();
-        if (json.data && json.data.price) {
-          return { price: parseFloat(json.data.price) };
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data && json.data.price) {
+            return { price: parseFloat(json.data.price) };
+          }
         }
       } catch(e) {
         console.error(`Oil API error for ${code}`);
       }
-
-      // Realistic fallbacks (April 2026 approx prices)
+      // Fallbacks
       const fallbacks = { WTI: 94, BRENT: 96, WCS: 90 };
       return { price: fallbacks[code.toUpperCase()] || 93 };
     }
@@ -118,7 +127,6 @@
       await renderCards();
     }
 
-    // Initial load + auto refresh every 60 seconds
     renderCards();
     setInterval(renderCards, 60000);
   </script>
