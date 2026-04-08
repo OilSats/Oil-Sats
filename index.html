@@ -10,39 +10,11 @@
     body { font-family: 'Inter', system_ui, sans-serif; }
     .price { font-size: 3.6rem; line-height: 1; }
     .chart-container { height: 480px; }
-
-    /* Saylor GIF styling */
-    .saylor-gif {
-      position: fixed;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 180px;
-      height: auto;
-      opacity: 0.85;
-      z-index: 10;
-      pointer-events: none;
-      border-radius: 12px;
-      box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
-    }
-    .saylor-left { left: 20px; }
-    .saylor-right { right: 20px; }
-
-    @media (max-width: 1024px) {
-      .saylor-gif { display: none; }
-    }
   </style>
 </head>
-<body class="bg-[#0a0a0a] text-white min-h-screen overflow-x-hidden">
+<body class="bg-[#0a0a0a] text-white min-h-screen">
 
-  <!-- Left Saylor GIF - working direct link -->
-  <img src="https://media.tenor.com/3fX0z0z0z0zAAAAC/there-is-no-second-best-michael-saylor.gif" 
-       class="saylor-gif saylor-left" alt="There is no second best">
-
-  <!-- Right Saylor GIF - working direct link -->
-  <img src="https://media.tenor.com/3fX0z0z0z0zAAAAC/there-is-no-second-best-michael-saylor.gif" 
-       class="saylor-gif saylor-right" alt="There is no second best">
-
-  <div class="max-w-6xl mx-auto px-6 py-8 relative">
+  <div class="max-w-6xl mx-auto px-6 py-8">
 
     <!-- Widgets -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10" id="cards"></div>
@@ -184,7 +156,11 @@
     async function renderChart() {
       const ctx = document.getElementById('satsChart');
 
-      const [wtiHistory] = await Promise.all([ getPastMonthPrices("WTI_USD") ]);
+      const [wtiHistory, brentHistory, wcsHistory] = await Promise.all([
+        getPastMonthPrices("WTI_USD"),
+        getPastMonthPrices("BRENT_CRUDE_USD"),
+        getPastMonthPrices("WCS_CRUDE_USD")
+      ]);
 
       let labels = [];
       let wtiSats = [], brentSats = [], wcsSats = [];
@@ -200,8 +176,8 @@
         });
 
         wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
-        brentSats = wtiHistory.map(h => satsPerBbl(h.price));
-        wcsSats = wtiHistory.map(h => satsPerBbl(h.price));
+        brentSats = brentHistory.map(h => satsPerBbl(h.price));
+        wcsSats = wcsHistory.map(h => satsPerBbl(h.price));
       }
 
       if (chartInstance) chartInstance.destroy();
@@ -211,9 +187,33 @@
         data: {
           labels: labels,
           datasets: [
-            { label: 'WTI',   data: wtiSats,   borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.15)', tension: 0.4, borderWidth: 3.5, pointRadius: 0 },
-            { label: 'Brent', data: brentSats, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.15)', tension: 0.4, borderWidth: 3.5, pointRadius: 0 },
-            { label: 'WCS',   data: wcsSats,   borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.15)', tension: 0.4, borderWidth: 3.5, pointRadius: 0 }
+            { 
+              label: 'WTI', 
+              data: wtiSats, 
+              borderColor: '#10b981', 
+              backgroundColor: 'rgba(16, 185, 129, 0.15)',
+              tension: 0.4,
+              borderWidth: 3.5,
+              pointRadius: 0 
+            },
+            { 
+              label: 'Brent', 
+              data: brentSats, 
+              borderColor: '#3b82f6', 
+              backgroundColor: 'rgba(59, 130, 246, 0.15)',
+              tension: 0.4,
+              borderWidth: 3.5,
+              pointRadius: 0 
+            },
+            { 
+              label: 'WCS', 
+              data: wcsSats, 
+              borderColor: '#f59e0b', 
+              backgroundColor: 'rgba(245, 158, 11, 0.15)',
+              tension: 0.4,
+              borderWidth: 3.5,
+              pointRadius: 0 
+            }
           ]
         },
         options: {
