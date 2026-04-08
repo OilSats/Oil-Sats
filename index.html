@@ -21,7 +21,7 @@
 
     <!-- Chart -->
     <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8">
-      <h2 class="text-xl font-medium mb-6 text-center">Last 30 Days - SATS/bbl & SATS/MMBtu (Own Gas Mining vs Selling Raw)</h2>
+      <h2 class="text-xl font-medium mb-6 text-center">Last 30 Days - SATS/bbl & SATS/MMBtu (Mining vs Selling Raw)</h2>
       <div class="chart-container">
         <canvas id="satsChart"></canvas>
       </div>
@@ -41,8 +41,8 @@
       "NATURAL_GAS_USD": 3.5
     };
 
-    const M70S_HASHRATE = 244;
-    const M70S_POWER_KW = 3.14;
+    const M70S_HASHRATE = 244;   // TH/s
+    const M70S_POWER_KW = 3.14;  // kW
 
     const CORS_PROXY = "https://corsproxy.io/?";
 
@@ -51,7 +51,7 @@
     }
 
     function dailySatsMined() {
-      const satsPerTHPerDay = 475;
+      const satsPerTHPerDay = 475;   // realistic April 2026 hashprice
       return Math.round(M70S_HASHRATE * satsPerTHPerDay);
     }
 
@@ -63,7 +63,7 @@
           const data = await res.json();
           if (data.bitcoin?.usd) btcPrice = data.bitcoin.usd;
         }
-      } catch (e) {}
+      } catch (e) { console.warn("BTC fetch failed"); }
     }
 
     async function getCurrentOilPrice(code) {
@@ -107,7 +107,7 @@
       return btcPrice > 0 ? Math.round((oilUsd / btcPrice) * 100000000) : 0;
     }
 
-    // $0 gas cost (own stranded gas) → gross sats per MMBtu
+    // Gross SATS/MMBtu with $0 gas cost (own stranded gas)
     function satsPerMMBtuOwnGas() {
       const dailyKwh = M70S_POWER_KW * 24;
       const kwhPerMMBtu = 293.071;
@@ -123,11 +123,7 @@
     }
 
     function formatNumber(num) {
-      return num.toLocaleString('en-US');
-    }
-
-    function formatUSD(num) {
-      return num.toFixed(2);
+      return (num || 0).toLocaleString('en-US');
     }
 
     function createWidgets() {
@@ -146,7 +142,7 @@
         let usdPrice = previousValues["NATURAL_GAS_USD"];
 
         if (item.code === "WTI_USD") {
-          usdPrice = previousValues["WTI_USD"];
+          usdPrice = previousValues["WTI_USD"] || 94;
           sats = satsPerBbl(usdPrice);
         } else if (item.code === "NATURAL_GAS_USD") {
           sats = satsPerBbl(usdPrice);
@@ -158,7 +154,7 @@
 
         const card = document.createElement("div");
         card.className = `bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${item.color}-400 transition-all group relative cursor-help`;
-        card.title = `BTC: $${btcPrice.toLocaleString()} | Oil company using own stranded gas`;
+        card.title = `BTC: $${btcPrice.toLocaleString()} | Using own stranded gas`;
         card.innerHTML = `
           <div class="uppercase tracking-widest text-sm font-medium text-${item.color}-400">${item.label}</div>
           <div id="sats-${item.code}" class="mt-6 price font-mono font-semibold text-white">${formatNumber(sats)}</div>
@@ -206,7 +202,7 @@
       let labels = [];
       let wtiSats = [], ngSats = [], ownGasSats = [];
 
-      if (wtiHistory.length > 0) {
+      if (wtiHistory.length > 0 && ngHistory.length > 0) {
         labels = wtiHistory.map(h => {
           const d = h.date;
           return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
@@ -214,7 +210,15 @@
 
         wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
         ngSats = ngHistory.map(h => satsPerBbl(h.price));
-        ownGasSats = ngHistory.map(() => satsPerMMBtuOwnGas());   // constant line
+
+        const constantOwnGas = satsPerMMBtuOwnGas();
+        ownGasSats = new Array(labels.length).fill(constantOwnGas);   // horizontal line
+      } else {
+        // Fallback if API fails
+        labels = ["No data"];
+        wtiSats = [0];
+        ngSats = [0];
+        ownGasSats = [satsPerMMBtuOwnGas()];
       }
 
       if (chartInstance) chartInstance.destroy();
@@ -247,7 +251,7 @@
               data: ownGasSats, 
               borderColor: '#38bdf8', 
               backgroundColor: 'rgba(56, 189, 248, 0.1)',
-              tension: 0.4,
+              tension: 0,
               borderWidth: 3.5,
               yAxisID: 'y'
             }
@@ -277,7 +281,7 @@
             },
             tooltip: {
               callbacks: {
-                title: (items) => items[0].label,   // YYYY/MM/DD
+                title: (items) => items[0].label,
                 label: (ctx) => ctx.dataset.label + ": " + ctx.raw.toLocaleString()
               }
             }
