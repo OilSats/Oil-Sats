@@ -76,7 +76,7 @@
 
     let previousValues = {
       "WTI_USD": 94,
-      "AECO_CAD": 2.8     // fallback AECO price in CAD/GJ
+      "AECO_CAD": 2.8
     };
 
     const GAS_VOLUME_M3_PER_DAY = 20000;
@@ -128,37 +128,35 @@
       return btcPrice > 0 ? Math.round((oilUsd / btcPrice) * 100000000) : 0;
     }
 
-    // AECO is in CAD/GJ — we calculate SATS per GJ directly
     function satsPerGJ_AECO(aecoCadPerGJ) {
       const dailyKwh = M70S_POWER_KW * 24;
-      const kwhPerGJ = 293.071 / 1.05506;   // approx 277.8 kWh per GJ
+      const kwhPerGJ = 293.071 / 1.05506;   // ≈ 277.8 kWh per GJ
       const gjPerDay = dailyKwh / kwhPerGJ;
-
       const dailySats = dailySatsMinedPerUnit(true);
       return Math.round(dailySats / gjPerDay);
     }
 
     function miningPremium(aecoCadPerGJ) {
       const ownGasSats = satsPerGJ_AECO(aecoCadPerGJ);
-      const gasSats = satsPerBbl(aecoCadPerGJ);   // approximate conversion
+      const gasSats = satsPerBbl(aecoCadPerGJ);
       return gasSats > 0 ? (ownGasSats / gasSats).toFixed(1) : "0";
     }
 
     function getSetupMetrics() {
       const m3PerDay = GAS_VOLUME_M3_PER_DAY;
-      const m3PerGJ = 0.0353;                    // rough conversion (1 m³ ≈ 0.0353 GJ)
+      const m3PerGJ = 0.0353;
       const gjPerDay = m3PerDay * m3PerGJ;
 
       const satsPerGJ = satsPerGJ_AECO(previousValues["AECO_CAD"]);
       const totalDailySatsNow = Math.round(satsPerGJ * gjPerDay);
       const totalDailySatsPostHalving = Math.round((satsPerGJ / 2) * gjPerDay);
 
-      const baseCapexCAD = 16500000;         // ~$12M USD → CAD
-      const soundMitigationCAD = 3850000;    // ~$2.8M USD → CAD
+      const baseCapexCAD = 16500000;
+      const soundMitigationCAD = 3850000;
       const totalInvestmentCAD = baseCapexCAD + soundMitigationCAD;
 
       const dailyRevenueUSD = (totalDailySatsNow / 100000000) * btcPrice;
-      const paybackDays = Math.round(totalInvestmentCAD / (dailyRevenueUSD * 1.39)); // rough USD to CAD
+      const paybackDays = Math.round(totalInvestmentCAD / (dailyRevenueUSD * 1.39)); // approx USD→CAD
       const paybackMonths = (paybackDays / 30).toFixed(1);
 
       return {
@@ -182,18 +180,89 @@
     function createWidgets() {
       const metrics = getSetupMetrics();
       const aecoPrice = previousValues["AECO_CAD"];
+      const wtiPrice = previousValues["WTI_USD"];
 
       const items = [
-        { code: "WTI_USD", label: "WTI", color: "emerald", value: formatNumber(satsPerBbl(previousValues["WTI_USD"] || 94)), unit: "SATS / bbl", tooltip: `WTI Price: $${(previousValues["WTI_USD"] || 94).toFixed(2)} USD/bbl` },
-        { code: "AECO_CAD", label: "AECO Alberta", color: "amber", value: formatNumber(satsPerGJ_AECO(aecoPrice)), unit: "SATS / GJ", tooltip: `AECO Price: C$${aecoPrice.toFixed(2)} per GJ` },
-        { code: "M70S_OWN", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_AECO(aecoPrice)), unit: "SATS / GJ", tooltip: "Revenue per GJ of own stranded Alberta gas (zero marginal cost)" },
-        { code: "PREMIUM", label: "Mining Premium", color: "violet", value: miningPremium(aecoPrice), unit: "×", tooltip: "How many times more profitable mining is vs selling raw AECO gas" },
-        { code: "DAILY_SATS", label: "Daily Sats (Now)", color: "cyan", value: formatNumber(metrics.totalDailySatsNow), unit: "SATS / DAY", tooltip: `Total sats earned per day from 20 e³m³/d` },
-        { code: "DAILY_SATS_HALVING", label: "Daily Sats (Post 2028)", color: "purple", value: formatNumber(metrics.totalDailySatsPostHalving), unit: "SATS / DAY", tooltip: "Estimated daily sats after the 2028 Bitcoin halving" },
-        { code: "INVESTMENT", label: "Base Investment", color: "rose", value: formatCAD(metrics.baseInvestment), unit: "CAD", tooltip: "C$16.5 million for ASICs, generators & infrastructure" },
-        { code: "SOUND", label: "Sound Mitigation", color: "orange", value: formatCAD(metrics.soundMitigation), unit: "CAD", tooltip: "Cost to reduce noise to ~40 dBA" },
-        { code: "TOTAL_INVEST", label: "Total Investment", color: "red", value: formatCAD(metrics.totalInvestment), unit: "CAD", tooltip: "Total capital required (incl. sound mitigation)" },
-        { code: "PAYBACK", label: "Payback Period", color: "lime", value: metrics.paybackMonths + " months", unit: "", tooltip: `Time to recover total investment at current prices` }
+        { 
+          code: "WTI_USD", 
+          label: "WTI", 
+          color: "emerald", 
+          value: formatNumber(satsPerBbl(wtiPrice)), 
+          unit: "SATS / bbl",
+          tooltip: `WTI Price: $${wtiPrice.toFixed(2)} USD per barrel`
+        },
+        { 
+          code: "AECO_CAD", 
+          label: "AECO Alberta", 
+          color: "amber", 
+          value: formatNumber(satsPerGJ_AECO(aecoPrice)), 
+          unit: "SATS / GJ",
+          tooltip: `AECO Price: C$${aecoPrice.toFixed(2)} per GJ`
+        },
+        { 
+          code: "M70S_OWN", 
+          label: "M70S+ Mining Revenue", 
+          color: "sky", 
+          value: formatNumber(satsPerGJ_AECO(aecoPrice)), 
+          unit: "SATS / GJ",
+          tooltip: "Revenue per GJ of own stranded Alberta gas (zero marginal cost)"
+        },
+        { 
+          code: "PREMIUM", 
+          label: "Mining Premium", 
+          color: "violet", 
+          value: miningPremium(aecoPrice), 
+          unit: "×",
+          tooltip: "How many times more profitable mining is vs selling raw AECO gas"
+        },
+        { 
+          code: "DAILY_SATS", 
+          label: "Daily Sats (Now)", 
+          color: "cyan", 
+          value: formatNumber(metrics.totalDailySatsNow), 
+          unit: "SATS / DAY",
+          tooltip: `Total sats earned per day from 20 e³m³/d`
+        },
+        { 
+          code: "DAILY_SATS_HALVING", 
+          label: "Daily Sats (Post 2028)", 
+          color: "purple", 
+          value: formatNumber(metrics.totalDailySatsPostHalving), 
+          unit: "SATS / DAY",
+          tooltip: "Estimated daily sats after the 2028 Bitcoin halving"
+        },
+        { 
+          code: "INVESTMENT", 
+          label: "Base Investment", 
+          color: "rose", 
+          value: formatCAD(metrics.baseInvestment), 
+          unit: "CAD",
+          tooltip: "C$16.5 million for ASICs, generators & infrastructure"
+        },
+        { 
+          code: "SOUND", 
+          label: "Sound Mitigation", 
+          color: "orange", 
+          value: formatCAD(metrics.soundMitigation), 
+          unit: "CAD",
+          tooltip: "Cost to reduce noise to ~40 dBA"
+        },
+        { 
+          code: "TOTAL_INVEST", 
+          label: "Total Investment", 
+          color: "red", 
+          value: formatCAD(metrics.totalInvestment), 
+          unit: "CAD",
+          tooltip: "Total capital required (incl. sound mitigation)"
+        },
+        { 
+          code: "PAYBACK", 
+          label: "Payback Period", 
+          color: "lime", 
+          value: metrics.paybackMonths + " months", 
+          unit: "",
+          tooltip: `Time to recover total investment at $${btcPrice.toLocaleString()} USD/BTC`
+        }
       ];
 
       const container = document.getElementById("cards");
