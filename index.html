@@ -21,7 +21,7 @@
 
     <!-- Chart -->
     <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8">
-      <h2 class="text-xl font-medium mb-6 text-center">Last 30 Days - SATS/bbl & SATS/MMBtu (Oil vs Mining on Own/Stranded Nat Gas)</h2>
+      <h2 class="text-xl font-medium mb-6 text-center">Last 30 Days - SATS/bbl & SATS/MMBtu (Own Gas Mining vs Selling Raw)</h2>
       <div class="chart-container">
         <canvas id="satsChart"></canvas>
       </div>
@@ -55,7 +55,7 @@
       return Math.round(M70S_HASHRATE * satsPerTHPerDay);
     }
 
-    async function getBTC() { /* same as before - using proxy */ 
+    async function getBTC() {
       try {
         const url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd";
         const res = await fetch(getProxiedUrl(url));
@@ -66,10 +66,12 @@
       } catch (e) {}
     }
 
-    async function getCurrentOilPrice(code) { /* same proxy version */ 
+    async function getCurrentOilPrice(code) {
       try {
         const url = `https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}`;
-        const res = await fetch(getProxiedUrl(url), { headers: { "Authorization": `Token ${OIL_API_KEY}` } });
+        const res = await fetch(getProxiedUrl(url), {
+          headers: { "Authorization": `Token ${OIL_API_KEY}` }
+        });
         if (res.ok) {
           const json = await res.json();
           if (json.data?.price) {
@@ -82,10 +84,12 @@
       return previousValues[code] || (code.includes("GAS") ? 3.5 : 93);
     }
 
-    async function getPastMonthPrices(code) { /* same proxy version */ 
+    async function getPastMonthPrices(code) {
       try {
         const url = `https://api.oilpriceapi.com/v1/prices/past_month?by_code=${code}&interval=1d`;
-        const res = await fetch(getProxiedUrl(url), { headers: { "Authorization": `Token ${OIL_API_KEY}` } });
+        const res = await fetch(getProxiedUrl(url), {
+          headers: { "Authorization": `Token ${OIL_API_KEY}` }
+        });
         if (res.ok) {
           const json = await res.json();
           if (json.data?.prices) {
@@ -103,7 +107,7 @@
       return btcPrice > 0 ? Math.round((oilUsd / btcPrice) * 100000000) : 0;
     }
 
-    // $0 gas cost → gross sats per MMBtu (oil company owns the gas)
+    // $0 gas cost (own stranded gas) → gross sats per MMBtu
     function satsPerMMBtuOwnGas() {
       const dailyKwh = M70S_POWER_KW * 24;
       const kwhPerMMBtu = 293.071;
@@ -164,8 +168,9 @@
       });
     }
 
-    async function updateWidgets() { /* same logic as previous working version */ 
+    async function updateWidgets() {
       await getBTC();
+
       const now = Date.now();
       const shouldUpdateOil = (now - lastOilUpdate) > 300000;
 
@@ -190,28 +195,93 @@
       if (shouldUpdateOil) lastOilUpdate = now;
     }
 
-    async function renderChart() { /* same as before but with own-gas line */ 
+    async function renderChart() {
       const ctx = document.getElementById('satsChart');
-      const [wtiHistory, ngHistory] = await Promise.all([getPastMonthPrices("WTI_USD"), getPastMonthPrices("NATURAL_GAS_USD")]);
 
-      const labels = wtiHistory.map(h => `${h.date.getFullYear()}/${String(h.date.getMonth()+1).padStart(2,'0')}/${String(h.date.getDate()).padStart(2,'0')}`);
-      const wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
-      const ngSats = ngHistory.map(h => satsPerBbl(h.price));
-      const ownGasSats = ngHistory.map(h => satsPerMMBtuOwnGas());
+      const [wtiHistory, ngHistory] = await Promise.all([
+        getPastMonthPrices("WTI_USD"),
+        getPastMonthPrices("NATURAL_GAS_USD")
+      ]);
+
+      let labels = [];
+      let wtiSats = [], ngSats = [], ownGasSats = [];
+
+      if (wtiHistory.length > 0) {
+        labels = wtiHistory.map(h => {
+          const d = h.date;
+          return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+        });
+
+        wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
+        ngSats = ngHistory.map(h => satsPerBbl(h.price));
+        ownGasSats = ngHistory.map(() => satsPerMMBtuOwnGas());   // constant line
+      }
 
       if (chartInstance) chartInstance.destroy();
 
-      chartInstance = new Chart(ctx, { /* same chart options as last working version */ 
+      chartInstance = new Chart(ctx, {
         type: 'line',
-        data: { labels, datasets: [
-          { label: 'WTI (SATS/bbl)', data: wtiSats, borderColor: '#10b981', yAxisID: 'y' },
-          { label: 'Nat Gas (SATS/MMBtu)', data: ngSats, borderColor: '#f59e0b', yAxisID: 'y1' },
-          { label: 'M70S+ Own Gas (SATS/MMBtu)', data: ownGasSats, borderColor: '#38bdf8', yAxisID: 'y1' }
-        ]},
-        options: { /* same options as previous version */ 
-          responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-          scales: { /* same scales */ },
-          plugins: { legend: { position: 'top' }, tooltip: { callbacks: { title: items => items[0].label } } }
+        data: {
+          labels: labels,
+          datasets: [
+            { 
+              label: 'WTI (SATS/bbl)', 
+              data: wtiSats, 
+              borderColor: '#10b981', 
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              tension: 0.4,
+              borderWidth: 3.5,
+              yAxisID: 'y'
+            },
+            { 
+              label: 'Nat Gas (SATS/MMBtu)', 
+              data: ngSats, 
+              borderColor: '#f59e0b', 
+              backgroundColor: 'rgba(245, 158, 11, 0.1)',
+              tension: 0.4,
+              borderWidth: 3.5,
+              yAxisID: 'y'
+            },
+            { 
+              label: 'M70S+ Own Gas (SATS/MMBtu - Free Gas)', 
+              data: ownGasSats, 
+              borderColor: '#38bdf8', 
+              backgroundColor: 'rgba(56, 189, 248, 0.1)',
+              tension: 0.4,
+              borderWidth: 3.5,
+              yAxisID: 'y'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: {
+              grid: { color: '#333' },
+              ticks: { color: '#888', maxTicksLimit: 8, maxRotation: 45 }
+            },
+            y: {
+              type: 'linear',
+              position: 'left',
+              grid: { color: '#333' },
+              ticks: { color: '#888', callback: v => v.toLocaleString() },
+              title: { display: true, text: 'SATS per unit', color: '#ddd', font: { size: 13 } }
+            }
+          },
+          plugins: {
+            legend: { 
+              position: 'top', 
+              labels: { color: '#ddd', font: { size: 14 }, usePointStyle: true, padding: 20 } 
+            },
+            tooltip: {
+              callbacks: {
+                title: (items) => items[0].label,   // YYYY/MM/DD
+                label: (ctx) => ctx.dataset.label + ": " + ctx.raw.toLocaleString()
+              }
+            }
+          }
         }
       });
     }
@@ -223,8 +293,13 @@
     }
 
     init();
+
+    // Live updates
     setInterval(() => updateWidgets(), 30000);
-    setInterval(async () => { await updateWidgets(); await renderChart(); }, 300000);
+    setInterval(async () => {
+      await updateWidgets();
+      await renderChart();
+    }, 300000);
   </script>
 </body>
 </html>
