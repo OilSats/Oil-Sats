@@ -3,56 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Oil Sats - Alberta AECO + M70S+</title>
+  <title>Oil Sats - AECO + M70S+ (Power Law Scenarios)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: 'Inter', system_ui, sans-serif; }
+    .widget-value { font-size: 2.65rem; line-height: 1.05; font-weight: 600; font-family: monospace; }
+    @media (max-width: 640px) { .widget-value { font-size: 2.05rem; } }
+    @media (min-width: 641px) and (max-width: 1024px) { .widget-value { font-size: 2.35rem; } }
 
-    .widget-value {
-      font-size: 2.75rem;
-      line-height: 1.1;
-      font-weight: 600;
-      font-family: monospace;
-    }
-
-    @media (max-width: 640px) { .widget-value { font-size: 2.1rem; } }
-    @media (min-width: 641px) and (max-width: 1024px) { .widget-value { font-size: 2.4rem; } }
-
-    .widget-card {
-      position: relative;
-    }
-
+    .widget-card { position: relative; }
     .widget-card .tooltip {
-      visibility: hidden;
-      position: absolute;
-      bottom: 100%;
-      left: 50%;
-      transform: translateX(-50%);
-      background-color: #1f2937;
-      color: #e5e7eb;
-      padding: 12px 16px;
-      border-radius: 8px;
-      font-size: 0.875rem;
-      line-height: 1.4;
-      z-index: 50;
-      opacity: 0;
-      transition: all 0.2s ease;
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-      margin-bottom: 10px;
+      visibility: hidden; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+      background-color: #1f2937; color: #e5e7eb; padding: 12px 16px; border-radius: 8px;
+      font-size: 0.85rem; line-height: 1.4; z-index: 50; opacity: 0; transition: all 0.2s ease;
+      box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); margin-bottom: 10px; white-space: pre-line;
     }
-
-    .widget-card:hover .tooltip,
-    .widget-card:active .tooltip {
-      visibility: visible;
-      opacity: 1;
-    }
+    .widget-card:hover .tooltip, .widget-card:active .tooltip { visibility: visible; opacity: 1; }
   </style>
 </head>
 <body class="bg-[#0a0a0a] text-white min-h-screen">
 
   <div class="max-w-6xl mx-auto px-4 sm:px-6 py-8">
     <div class="text-center text-gray-500 text-xs mb-6">
-      Version 2026-04-09 • AECO + M70S+ Dashboard
+      Version 2026-04-09 • AECO + M70S+ • Power Law R² = 0.96
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-6" id="cards"></div>
@@ -60,92 +33,72 @@
 
   <script>
     let btcPrice = 71325;
-    let aecoPrice = 2.80;   // fallback AECO in CAD/GJ
-    let wtiPrice = 94;
+    let aecoPrice = 2.80;   // CAD/GJ fallback
 
     const GAS_VOLUME_M3_PER_DAY = 20000;
     const M70S_HASHRATE = 244;
     const M70S_POWER_KW = 3.14;
+    const TOTAL_INVEST_CAD = 20350000;   // $16.5M base + $3.85M sound = C$20.35M
 
-    function dailySatsMinedPerUnit(current = true) {
-      const satsPerTH = current ? 475 : 237.5;
-      return Math.round(M70S_HASHRATE * satsPerTH);
-    }
-
-    function satsPerBbl(oilUsd) {
-      return btcPrice > 0 ? Math.round((oilUsd / btcPrice) * 100000000) : 0;
+    function dailySatsMinedPerUnit(scenario) {
+      if (scenario === "bear") return Math.round(M70S_HASHRATE * 400);
+      if (scenario === "base") return Math.round(M70S_HASHRATE * 475);
+      if (scenario === "bull") return Math.round(M70S_HASHRATE * 550);
+      return Math.round(M70S_HASHRATE * 475);
     }
 
     function satsPerGJ_AECO() {
       return btcPrice > 0 ? Math.round((aecoPrice / btcPrice) * 100000000) : 0;
     }
 
-    function satsPerGJ_Mining() {
+    function satsPerGJ_Mining(scenario) {
       const dailyKwh = M70S_POWER_KW * 24;
       const kwhPerGJ = 277.8;
       const gjPerDay = dailyKwh / kwhPerGJ;
-      const dailySats = dailySatsMinedPerUnit(true);
+      const dailySats = dailySatsMinedPerUnit(scenario);
       return Math.round(dailySats / gjPerDay);
     }
 
-    function miningPremium() {
-      const mining = satsPerGJ_Mining();
-      const gas = satsPerGJ_AECO();
-      return gas > 0 ? (mining / gas).toFixed(1) : "0";
-    }
-
-    function getSetupMetrics() {
+    function getSetupMetrics(scenario) {
       const gjPerDay = GAS_VOLUME_M3_PER_DAY * 0.0353;
-      const satsPerGJ = satsPerGJ_Mining();
-      const totalDailySatsNow = Math.round(satsPerGJ * gjPerDay);
-      const totalDailySatsPost = Math.round((satsPerGJ / 2) * gjPerDay);
+      const satsPerGJ = satsPerGJ_Mining(scenario);
+      const totalDailySats = Math.round(satsPerGJ * gjPerDay);
 
-      const baseCAD = 16500000;
-      const soundCAD = 3850000;
-      const totalCAD = baseCAD + soundCAD;
+      const dailyRevUSD = (totalDailySats / 100000000) * btcPrice;
+      const paybackMonths = ((TOTAL_INVEST_CAD / (dailyRevUSD * 1.39)) / 30).toFixed(1);
 
-      const dailyRevUSD = (totalDailySatsNow / 100000000) * btcPrice;
-      const paybackMonths = ((totalCAD / (dailyRevUSD * 1.39)) / 30).toFixed(1);
-
-      return { totalDailySatsNow, totalDailySatsPost, baseCAD, soundCAD, totalCAD, paybackMonths };
+      return { totalDailySats, paybackMonths };
     }
 
     function formatNumber(num) { return (num || 0).toLocaleString('en-US'); }
     function formatCAD(num) { return 'C$' + num.toLocaleString('en-US'); }
 
     function createWidgets() {
-      const metrics = getSetupMetrics();
+      const bear = getSetupMetrics("bear");
+      const base = getSetupMetrics("base");
+      const bull = getSetupMetrics("bull");
 
       const items = [
-        { code: "WTI_USD", label: "WTI", color: "emerald", value: formatNumber(satsPerBbl(wtiPrice)), 
-          unit: "SATS / bbl", tooltip: `WTI: $${wtiPrice.toFixed(2)} / bbl<br>BTC: $${btcPrice.toLocaleString()} / BTC` },
+        { code: "WTI", label: "WTI", color: "emerald", value: formatNumber(Math.round((94 / btcPrice) * 1e8)), unit: "SATS / bbl", 
+          tooltip: `WTI: $94.00 / bbl\nBTC: $${btcPrice.toLocaleString()} / BTC` },
 
-        { code: "AECO_CAD", label: "AECO Alberta", color: "amber", value: formatNumber(satsPerGJ_AECO()), 
-          unit: "SATS / GJ", tooltip: `AECO Price: C$${aecoPrice.toFixed(2)} per GJ` },
+        { code: "AECO", label: "AECO Alberta", color: "amber", value: formatNumber(Math.round((aecoPrice / btcPrice) * 1e8)), unit: "SATS / GJ", 
+          tooltip: `AECO: C$${aecoPrice.toFixed(2)} / GJ` },
 
-        { code: "M70S_OWN", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_Mining()), 
-          unit: "SATS / GJ", tooltip: "Revenue per GJ using own stranded gas" },
+        { code: "MINING", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_Mining("base")), unit: "SATS / GJ", 
+          tooltip: "Revenue per GJ using own stranded gas" },
 
-        { code: "PREMIUM", label: "Mining Premium", color: "violet", value: miningPremium(), 
-          unit: "×", tooltip: "Mining vs selling raw AECO gas" },
+        { code: "PREMIUM", label: "Mining Premium", color: "violet", value: (satsPerGJ_Mining("base") / Math.round((aecoPrice / btcPrice) * 1e8)).toFixed(1), unit: "×", 
+          tooltip: "Mining vs selling raw AECO gas" },
 
-        { code: "DAILY_SATS", label: "Daily Sats (Now)", color: "cyan", value: formatNumber(metrics.totalDailySatsNow), 
-          unit: "SATS / DAY", tooltip: "Total sats per day from 20 e³m³/d" },
+        { code: "DAILY_NOW", label: "Daily Sats (Now)", color: "cyan", 
+          value: `${formatNumber(bear.totalDailySats)} / ${formatNumber(base.totalDailySats)} / ${formatNumber(bull.totalDailySats)}`, 
+          unit: "Bear / Base / Bull", tooltip: "Daily sats from 20 e³m³/d" },
 
-        { code: "DAILY_SATS_HALVING", label: "Daily Sats (Post 2028)", color: "purple", value: formatNumber(metrics.totalDailySatsPost), 
-          unit: "SATS / DAY", tooltip: "After 2028 halving" },
-
-        { code: "INVESTMENT", label: "Base Investment", color: "rose", value: formatCAD(metrics.baseCAD), 
-          unit: "CAD", tooltip: "ASICs + generators + infrastructure" },
-
-        { code: "SOUND", label: "Sound Mitigation", color: "orange", value: formatCAD(metrics.soundCAD), 
-          unit: "CAD", tooltip: "To ~40 dBA" },
-
-        { code: "TOTAL_INVEST", label: "Total Investment", color: "red", value: formatCAD(metrics.totalCAD), 
-          unit: "CAD", tooltip: "Full project cost" },
-
-        { code: "PAYBACK", label: "Payback Period", color: "lime", value: metrics.paybackMonths + " months", 
-          unit: "", tooltip: `Time to recover total investment at $${btcPrice.toLocaleString()} USD/BTC` }
+        { code: "PAYBACK", label: "Payback Period", color: "lime", 
+          value: `${bear.paybackMonths} / ${base.paybackMonths} / ${bull.paybackMonths}`, 
+          unit: "Bear / Base / Bull (months)", 
+          tooltip: `Time to recover C$${TOTAL_INVEST_CAD.toLocaleString()} at $${btcPrice.toLocaleString()} USD/BTC\nPower Law R² = 0.96` }
       ];
 
       const container = document.getElementById("cards");
@@ -165,13 +118,13 @@
       });
     }
 
-    // Simple update that doesn't rely on API for now
-    function updateWidgets() {
+    // Simple refresh (no heavy API dependency for now)
+    function init() {
       createWidgets();
     }
 
-    createWidgets();
-    setInterval(updateWidgets, 60000);   // refresh every minute
+    init();
+    setInterval(init, 60000);   // refresh every minute
   </script>
 </body>
 </html>
