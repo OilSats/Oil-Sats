@@ -16,7 +16,7 @@
     <!-- Header -->
     <div class="flex justify-between items-center mb-12 border-b border-gray-800 pb-6">
       <div class="flex items-center gap-4">
-        <!-- Fixed Oil Drum + Bitcoin Logo -->
+        <!-- Oil Drum + Bitcoin Logo -->
         <img 
           src="https://files.oaiusercontent.com/file-Vl3vXb8fK9pL2mN7qR8sT9uV?se=2026-04-09T00%3A00%3A00Z&sp=r&sv=2024-08-04&sr=b&rscc=max-age%3D31536000%2C%20immutable&rscd=attachment%3B%20filename%3D2041921262063382531.png" 
           alt="Oil Sats Logo" 
@@ -42,95 +42,4 @@
   </div>
 
   <script>
-    const API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a";
-
-    let btcPrice = 0;
-
-    async function getBTC() {
-      try {
-        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
-        const data = await res.json();
-        btcPrice = data.bitcoin.usd || 0;
-      } catch(e) {
-        console.error("BTC fetch error");
-        btcPrice = 71450; // safe fallback
-      }
-    }
-
-    async function getOilPrice(code) {
-      try {
-        const res = await fetch(`https://api.oilpriceapi.com/v1/prices/latest?api_key=${API_KEY}`);
-        const data = await res.json();
-        
-        if (data.data && data.data[code.toUpperCase()]) {
-          return { price: data.data[code.toUpperCase()].price };
-        }
-        return { price: 0 };
-      } catch(e) {
-        console.error(`Oil fetch error for ${code}`);
-        // Fallback approximate prices
-        const fallbacks = { WTI: 72, BRENT: 75, WCS: 65 };
-        return { price: fallbacks[code.toUpperCase()] || 70 };
-      }
-    }
-
-    function satsPerBbl(oilUsd) {
-      if (!btcPrice || btcPrice === 0) return 0;
-      return Math.round((oilUsd / btcPrice) * 100000000);
-    }
-
-    function formatNumber(num) {
-      return num.toLocaleString('en-US');
-    }
-
-    async function renderCards() {
-      await getBTC();
-      
-      const oils = [
-        { code: "WTI", label: "WTI", color: "emerald" },
-        { code: "BRENT", label: "Brent", color: "blue" },
-        { code: "WCS", label: "WCS", color: "amber" }
-      ];
-
-      const container = document.getElementById("cards");
-      container.innerHTML = "";
-
-      for (const oil of oils) {
-        const oilData = await getOilPrice(oil.code);
-        const usdPrice = parseFloat(oilData.price) || 0;
-        const sats = satsPerBbl(usdPrice);
-
-        const cardHTML = `
-          <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${oil.color}-400 transition-all">
-            <div class="flex justify-between items-start">
-              <div>
-                <div class="flex items-center gap-2 text-${oil.color}-400">
-                  <i class="fa-solid fa-oil-can"></i>
-                  <span class="uppercase tracking-widest text-sm font-medium">${oil.label}</span>
-                </div>
-                <div class="mt-6 price font-mono font-semibold text-white">${formatNumber(sats)}</div>
-                <div class="text-xs text-gray-400 mt-1">SATS / bbl</div>
-              </div>
-              <div class="text-right">
-                <div class="text-2xl font-medium">$${usdPrice.toFixed(2)}</div>
-              </div>
-            </div>
-            <div class="mt-8 text-xs text-gray-500 flex justify-between">
-              <span>Live • Auto-refreshes</span>
-              <span class="font-mono">${btcPrice ? btcPrice.toLocaleString() + ' USD/BTC' : ''}</span>
-            </div>
-          </div>`;
-        container.innerHTML += cardHTML;
-      }
-    }
-
-    async function refreshAll() {
-      await renderCards();
-    }
-
-    // Initial load + auto refresh
-    renderCards();
-    setInterval(renderCards, 60000);
-  </script>
-</body>
-</html>
+    const API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a
