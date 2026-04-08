@@ -7,7 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: 'Inter', system_ui, sans-serif; }
-    .price { font-size: 3.4rem; line-height: 1; }
+    .price { font-size: 3.35rem; line-height: 1; }
   </style>
 </head>
 <body class="bg-[#0a0a0a] text-white min-h-screen">
@@ -15,7 +15,7 @@
   <div class="max-w-6xl mx-auto px-6 py-8">
 
     <!-- Widgets -->
-    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6" id="cards"></div>
+    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-6" id="cards"></div>
 
   </div>
 
@@ -41,9 +41,10 @@
       return CORS_PROXY + encodeURIComponent(url);
     }
 
-    function dailySatsMinedPerUnit() {
-      const satsPerTHPerDay = 475;
-      return Math.round(M70S_HASHRATE * satsPerTHPerDay);
+    function dailySatsMinedPerUnit(current = true) {
+      const currentSatsPerTH = 475;
+      const postHalvingSatsPerTH = Math.round(currentSatsPerTH / 2); // Halving reduces subsidy by half
+      return Math.round(M70S_HASHRATE * (current ? currentSatsPerTH : postHalvingSatsPerTH));
     }
 
     async function getBTC() {
@@ -83,7 +84,7 @@
       const dailyKwh = M70S_POWER_KW * 24;
       const kwhPerMMBtu = 293.071;
       const mmbtuPerDay = dailyKwh / kwhPerMMBtu;
-      const dailySats = dailySatsMinedPerUnit();
+      const dailySats = dailySatsMinedPerUnit(true);
       return Math.round(dailySats / mmbtuPerDay);
     }
 
@@ -99,19 +100,20 @@
       const mmbtuPerDay = m3PerDay / m3PerMMBtu;
 
       const satsPerMMBtu = satsPerMMBtuOwnGas();
-      const totalDailySats = Math.round(satsPerMMBtu * mmbtuPerDay);
+      const totalDailySatsNow = Math.round(satsPerMMBtu * mmbtuPerDay);
+      const totalDailySatsPostHalving = Math.round((satsPerMMBtu / 2) * mmbtuPerDay); // Halving effect
 
-      const baseCapexUSD = 12000000;           // $12M base (ASICs + gensets + infrastructure)
-      const soundMitigationUSD = 2800000;      // $2.8M for high-performance sound mitigation to ~40 dBA
-
+      const baseCapexUSD = 12000000;
+      const soundMitigationUSD = 2800000;
       const totalInvestmentUSD = baseCapexUSD + soundMitigationUSD;
 
-      const dailyRevenueUSD = (totalDailySats / 100000000) * btcPrice;
+      const dailyRevenueUSD = (totalDailySatsNow / 100000000) * btcPrice;
       const paybackDays = Math.round(totalInvestmentUSD / dailyRevenueUSD);
       const paybackMonths = (paybackDays / 30).toFixed(1);
 
       return {
-        totalDailySats,
+        totalDailySatsNow,
+        totalDailySatsPostHalving,
         baseInvestment: baseCapexUSD,
         soundMitigation: soundMitigationUSD,
         totalInvestment: totalInvestmentUSD,
@@ -136,7 +138,8 @@
         { code: "NATURAL_GAS_USD", label: "Nat Gas", color: "amber", value: formatNumber(satsPerBbl(previousValues["NATURAL_GAS_USD"])), unit: "SATS / MMBtu" },
         { code: "M70S_OWN", label: "M70S+ Own Gas", color: "sky", value: formatNumber(satsPerMMBtuOwnGas()), unit: "SATS / MMBtu (free gas)" },
         { code: "PREMIUM", label: "Mining Premium", color: "violet", value: miningPremium(previousValues["NATURAL_GAS_USD"]), unit: "× vs Selling Gas" },
-        { code: "DAILY_SATS", label: "Daily Sats", color: "cyan", value: formatNumber(metrics.totalDailySats), unit: "SATS / DAY (20 e³m³/d)" },
+        { code: "DAILY_SATS", label: "Daily Sats (Now)", color: "cyan", value: formatNumber(metrics.totalDailySatsNow), unit: "SATS / DAY (20 e³m³/d)" },
+        { code: "DAILY_SATS_HALVING", label: "Daily Sats (Post 2028 Halving)", color: "purple", value: formatNumber(metrics.totalDailySatsPostHalving), unit: "SATS / DAY (est. after halving)" },
         { code: "INVESTMENT", label: "Base Investment", color: "rose", value: formatUSD(metrics.baseInvestment), unit: "ASICs + Infrastructure" },
         { code: "SOUND", label: "Sound Mitigation", color: "orange", value: formatUSD(metrics.soundMitigation), unit: "to ~40 dBA" },
         { code: "TOTAL_INVEST", label: "Total Investment", color: "red", value: formatUSD(metrics.totalInvestment), unit: "incl. Sound Mitigation" },
@@ -149,7 +152,7 @@
       items.forEach(item => {
         const card = document.createElement("div");
         card.className = `bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${item.color}-400 transition-all group relative cursor-help`;
-        card.title = `BTC: $${btcPrice.toLocaleString()} | Using own stranded gas • Sound reduced to residential-friendly ~40 dBA`;
+        card.title = `BTC: $${btcPrice.toLocaleString()} | Using own stranded gas • Sound reduced to ~40 dBA`;
 
         card.innerHTML = `
           <div class="uppercase tracking-widest text-sm font-medium text-${item.color}-400">${item.label}</div>
@@ -179,7 +182,8 @@
         "NATURAL_GAS_USD": formatNumber(satsPerBbl(ngPrice)),
         "M70S_OWN": formatNumber(satsPerMMBtuOwnGas()),
         "PREMIUM": miningPremium(ngPrice),
-        "DAILY_SATS": formatNumber(metrics.totalDailySats),
+        "DAILY_SATS": formatNumber(metrics.totalDailySatsNow),
+        "DAILY_SATS_HALVING": formatNumber(metrics.totalDailySatsPostHalving),
         "INVESTMENT": formatUSD(metrics.baseInvestment),
         "SOUND": formatUSD(metrics.soundMitigation),
         "TOTAL_INVEST": formatUSD(metrics.totalInvestment),
