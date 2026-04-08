@@ -13,7 +13,7 @@
 </head>
 <body class="bg-[#0a0a0a] text-white min-h-screen">
   <div class="max-w-5xl mx-auto px-6 py-8">
-    <!-- Header (Strive-style) -->
+    <!-- Header -->
     <div class="flex justify-between items-center mb-12 border-b border-gray-800 pb-6">
       <div class="flex items-center gap-3">
         <i class="fa-solid fa-oil-can text-3xl text-amber-400"></i>
@@ -23,7 +23,6 @@
         <button onclick="refreshAll()" class="flex items-center gap-2 hover:text-amber-400 transition">
           <i class="fa-solid fa-rotate"></i> Refresh
         </button>
-        <a href="https://treasury.strive.com" target="_blank" class="text-gray-400 hover:text-white">Inspired by Strive</a>
       </div>
     </div>
 
@@ -33,12 +32,13 @@
     </div>
 
     <div class="text-center text-xs text-gray-500 mt-12">
-      Data from CoinGecko + OilPriceAPI • Updates every 60s • 1 BTC = 100,000,000 sats
+      WTI • Brent • WCS in Sats per barrel • Updates every 60s
     </div>
   </div>
 
   <script>
-    const API_KEY = "YOUR_OILPRICEAPI_KEY_HERE";   // ← PASTE YOUR KEY HERE
+    const API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a";   // Your key is already here
+
     let btcPrice = 0;
 
     async function getBTC() {
@@ -50,16 +50,13 @@
     }
 
     async function getOilPrice(code) {
-      if (!API_KEY || API_KEY === "YOUR_OILPRICEAPI_KEY_HERE") {
-        return { price: 85, name: code }; // fallback demo
-      }
       try {
         const res = await fetch(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}_USD&api_key=${API_KEY}`);
         const data = await res.json();
         return data.data || { price: 0 };
       } catch(e) {
         console.log("Oil fetch error for", code);
-        return { price: 0 };
+        return { price: 85 }; // fallback
       }
     }
 
@@ -86,7 +83,7 @@
 
       for (const oil of oils) {
         const oilData = await getOilPrice(oil.code);
-        const usdPrice = oilData.price || 0;
+        const usdPrice = parseFloat(oilData.price) || 0;
         const sats = satsPerBbl(usdPrice);
 
         const cardHTML = `
@@ -106,7 +103,7 @@
               </div>
             </div>
             <div class="mt-8 text-xs text-gray-500 flex justify-between">
-              <span>Last updated just now</span>
+              <span>Live • Auto-refreshes</span>
               <span class="font-mono">${btcPrice ? btcPrice.toLocaleString() + ' USD/BTC' : ''}</span>
             </div>
           </div>`;
@@ -115,15 +112,12 @@
     }
 
     async function refreshAll() {
-      const btns = document.querySelectorAll("button");
-      btns.forEach(b => b.disabled = true);
       await renderCards();
-      btns.forEach(b => b.disabled = false);
     }
 
-    // Initial load + auto-refresh
+    // Load immediately + auto refresh every 60 seconds
     renderCards();
-    setInterval(renderCards, 60000);   // every 60 seconds
+    setInterval(renderCards, 60000);
   </script>
 </body>
 </html>
