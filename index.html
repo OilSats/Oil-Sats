@@ -9,16 +9,16 @@
   <style>
     body { font-family: 'Inter', system_ui, sans-serif; }
     .price { font-size: 3.6rem; line-height: 1; }
-    .chart-container { max-height: 380px; }
+    .chart-container { height: 520px; }
   </style>
 </head>
 <body class="bg-[#0a0a0a] text-white min-h-screen">
   <div class="max-w-6xl mx-auto px-6 py-8">
 
-    <!-- Widgets at the top -->
+    <!-- Widgets -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10" id="cards"></div>
 
-    <!-- Line Chart -->
+    <!-- Taller Historical Chart -->
     <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8">
       <h2 class="text-xl font-medium mb-6 text-center">Last 30 Days — SATS per Barrel</h2>
       <div class="chart-container">
@@ -39,10 +39,12 @@
         const proxy = await res.json();
         const data = JSON.parse(proxy.contents);
         btcPrice = data.bitcoin?.usd || 71500;
-      } catch(e) {}
+      } catch(e) { 
+        console.error("BTC fetch failed"); 
+      }
     }
 
-    async function getOilPrice(code) {
+    async function getCurrentOilPrice(code) {
       try {
         const res = await fetch(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}_USD`, {
           headers: { "Authorization": `Token ${OIL_API_KEY}` }
@@ -56,6 +58,24 @@
       return fallbacks[code.toUpperCase()] || 93;
     }
 
+    async function getPastMonthPrices(code) {
+      try {
+        const res = await fetch(`https://api.oilpriceapi.com/v1/prices/past_month?by_code=${code}_USD&interval=1d`, {
+          headers: { "Authorization": `Token ${OIL_API_KEY}` }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data && json.data.prices) {
+            return json.data.prices.map(item => ({
+              date: new Date(item.date),
+              price: parseFloat(item.price)
+            })).reverse();
+          }
+        }
+      } catch(e) { console.error(`Historical fetch failed for ${code}`); }
+      return [];
+    }
+
     function satsPerBbl(oilUsd) {
       return btcPrice > 0 ? Math.round((oilUsd / btcPrice) * 100000000) : 0;
     }
@@ -66,7 +86,6 @@
 
     async function renderWidgets() {
       await getBTC();
-
       const oils = [
         { code: "WTI", label: "WTI", color: "emerald" },
         { code: "BRENT", label: "Brent", color: "blue" },
@@ -77,12 +96,12 @@
       container.innerHTML = "";
 
       for (const oil of oils) {
-        const usdPrice = await getOilPrice(oil.code);
+        const usdPrice = await getCurrentOilPrice(oil.code);
         const sats = satsPerBbl(usdPrice);
 
         const cardHTML = `
-          <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${oil.color}-400 transition-all group relative"
-               title="Oil: $${usdPrice.toFixed(2)} | BTC: $${btcPrice.toLocaleString()}">
+          <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${oil.color}-400 transition-all group relative cursor-help"
+               title="Oil: $${usdPrice.toFixed(2)} USD/bbl\nBTC: $${btcPrice.toLocaleString()} USD">
             <div class="uppercase tracking-widest text-sm font-medium text-${oil.color}-400">${oil.label}</div>
             <div class="mt-6 price font-mono font-semibold text-white">${formatNumber(sats)}</div>
             <div class="text-xs text-gray-400 mt-1">SATS / bbl</div>
@@ -91,20 +110,20 @@
       }
     }
 
-    // Simple 30-day demo data (replace with real historical fetch later if needed)
     async function renderChart() {
       const ctx = document.getElementById('satsChart');
 
-      // Demo data — last 30 days (you can expand this with real API calls)
-      const labels = Array.from({length: 30}, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - (29 - i));
-        return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
-      });
+      const [wtiHistory, brentHistory, wcsHistory] = await Promise.all([
+        getPastMonthPrices("WTI"),
+        getPastMonthPrices("BRENT"),
+        getPastMonthPrices("WCS")
+      ]);
 
-      const wtiData = Array.from({length: 30}, () => 125000 + Math.random() * 18000);
-      const brentData = Array.from({length: 30}, () => 128000 + Math.random() * 17000);
-      const wcsData = Array.from({length: 30}, () => 118000 + Math.random() * 20000);
+      const labels = wtiHistory.map(h => h.date.toLocaleDateString('en-US', {month:'short', day:'numeric'}));
+
+      const wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
+      const brentSats = brentHistory.map(h => satsPerBbl(h.price));
+      const wcsSats = wcsHistory.map(h => satsPerBbl(h.price));
 
       if (chartInstance) chartInstance.destroy();
 
@@ -113,21 +132,59 @@
         data: {
           labels: labels,
           datasets: [
-            { label: 'WTI', data: wtiData, borderColor: '#10b981', tension: 0.3, borderWidth: 3 },
-            { label: 'Brent', data: brentData, borderColor: '#3b82f6', tension: 0.3, borderWidth: 3 },
-            { label: 'WCS', data: wcsData, borderColor: '#f59e0b', tension: 0.3, borderWidth: 3 }
+            { 
+              label: 'WTI', 
+              data: wtiSats, 
+              borderColor: '#10b981', 
+              backgroundColor: 'rgba(16, 185, 129, 0.15)',
+              tension: 0.4,
+              borderWidth: 3.5,
+              pointRadius: 0
+            },
+            { 
+              label: 'Brent', 
+              data: brentSats, 
+              borderColor: '#3b82f6', 
+              backgroundColor: 'rgba(59, 130, 246, 0.15)',
+              tension: 0.4,
+              borderWidth: 3.5,
+              pointRadius: 0
+            },
+            { 
+              label: 'WCS', 
+              data: wcsSats, 
+              borderColor: '#f59e0b', 
+              backgroundColor: 'rgba(245, 158, 11, 0.15)',
+              tension: 0.4,
+              borderWidth: 3.5,
+              pointRadius: 0
+            }
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
           plugins: {
-            legend: { position: 'top', labels: { color: '#ddd', font: { size: 13 } } },
-            tooltip: { mode: 'index', intersect: false }
+            legend: { 
+              position: 'top', 
+              labels: { color: '#ddd', font: { size: 14 }, padding: 20, usePointStyle: true } 
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ctx.dataset.label + ": " + ctx.raw.toLocaleString() + " SATS/bbl"
+              }
+            }
           },
           scales: {
-            y: { grid: { color: '#333' }, ticks: { color: '#888', callback: v => v.toLocaleString() } },
-            x: { grid: { color: '#333' }, ticks: { color: '#888' } }
+            y: { 
+              grid: { color: '#333' }, 
+              ticks: { color: '#888', callback: v => v.toLocaleString() } 
+            },
+            x: { 
+              grid: { color: '#333' }, 
+              ticks: { color: '#888', maxTicksLimit: 12 } 
+            }
           }
         }
       });
@@ -135,12 +192,17 @@
 
     async function init() {
       await renderWidgets();
-      renderChart();
+      await renderChart();
     }
 
-    // Auto-refresh widgets every 60 seconds (chart stays static for now)
+    // Initial load
     init();
-    setInterval(renderWidgets, 60000);
+
+    // Faster BTC + widget updates: every 30 seconds
+    setInterval(renderWidgets, 30000);
+
+    // Chart auto-refreshes every 5 minutes (300000 ms)
+    setInterval(renderChart, 300000);
   </script>
 </body>
 </html>
