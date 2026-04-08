@@ -17,11 +17,11 @@
   <div class="max-w-6xl mx-auto px-6 py-8">
 
     <!-- Widgets -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10" id="cards"></div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10" id="cards"></div>
 
     <!-- Chart -->
     <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8">
-      <h2 class="text-xl font-medium mb-6 text-center">Last 30 Days - SATS/bbl & SATS/MMBtu (Oil vs Mining on Nat Gas at Market Price)</h2>
+      <h2 class="text-xl font-medium mb-6 text-center">Last 30 Days</h2>
       <div class="chart-container">
         <canvas id="satsChart"></canvas>
       </div>
@@ -45,10 +45,10 @@
     const M70S_HASHRATE = 244;     // TH/s
     const M70S_POWER_KW = 3.14;    // kW (3140 W)
 
-    // Updated daily sats per TH/s (based on April 2026 network conditions ~139T difficulty, ~950-1000 EH/s hashrate)
+    // Accurate baseline for April 2026
     function dailySatsMined() {
-      const dailySatsPerTH = 475;   // ~475 sats/TH/s/day (realistic April 2026 hashprice)
-      return Math.round(M70S_HASHRATE * dailySatsPerTH);
+      const satsPerTHPerDay = 475;   // Realistic hashprice April 2026
+      return Math.round(M70S_HASHRATE * satsPerTHPerDay);
     }
 
     async function getBTC() {
@@ -106,23 +106,25 @@
       return btcPrice > 0 ? Math.round((oilUsd / btcPrice) * 100000000) : 0;
     }
 
-    // Net sats per MMBtu after paying market gas price for power
-    function satsPerMMBtuMarketPower(ngPriceUsd) {
+    // Net sats per MMBtu AFTER paying market gas price
+    function satsPerMMBtuNet(ngPriceUsd) {
       const dailyKwh = M70S_POWER_KW * 24;
       const kwhPerMMBtu = 293.071;
-      const mmbtuConsumedPerDay = dailyKwh / kwhPerMMBtu;
+      const mmbtuPerDay = dailyKwh / kwhPerMMBtu;
 
       const dailySatsGross = dailySatsMined();
-      const dailyGasCostUsd = mmbtuConsumedPerDay * ngPriceUsd;
-      
-      // Convert gas cost to equivalent sats (at current BTC price)
-      const dailySatsCost = (dailyGasCostUsd / btcPrice) * 100000000;
-      
-      // Net sats after paying for gas
-      const netSats = Math.max(0, Math.round(dailySatsGross - dailySatsCost));
-      
-      // Return net sats per MMBtu of gas consumed
-      return Math.round(netSats / mmbtuConsumedPerDay);
+      const dailyGasCostUsd = mmbtuPerDay * ngPriceUsd;
+      const dailySatsGasCost = (dailyGasCostUsd / btcPrice) * 100000000;
+
+      const netDailySats = Math.max(0, dailySatsGross - dailySatsGasCost);
+      return Math.round(netDailySats / mmbtuPerDay);
+    }
+
+    // Mining Premium (how many times better mining is vs just selling gas)
+    function miningPremium(ngPriceUsd) {
+      const netSats = satsPerMMBtuNet(ngPriceUsd);
+      const gasSats = satsPerBbl(ngPriceUsd);   // SATS/MMBtu from selling gas raw
+      return gasSats > 0 ? (netSats / gasSats).toFixed(2) : "0.00";
     }
 
     function formatNumber(num) {
@@ -137,7 +139,8 @@
       const items = [
         { code: "WTI_USD", label: "WTI", color: "emerald", unit: "SATS / bbl" },
         { code: "NATURAL_GAS_USD", label: "Nat Gas", color: "amber", unit: "SATS / MMBtu" },
-        { code: "M70S_MARKET", label: "M70S+ Market Power", color: "sky", unit: "SATS / MMBtu" }
+        { code: "M70S_NET", label: "M70S+ Net", color: "sky", unit: "Net SATS / MMBtu (after gas cost)" },
+        { code: "PREMIUM", label: "Mining Premium", color: "violet", unit: "× vs Selling Gas" }
       ];
 
       const container = document.getElementById("cards");
@@ -145,21 +148,34 @@
 
       items.forEach(item => {
         let sats = 0;
-        let usdPrice = 0;
+        let usdPrice = previousValues["NATURAL_GAS_USD"];
 
-        if (item.code === "M70S_MARKET") {
-          usdPrice = previousValues["NATURAL_GAS_USD"];
-          sats = satsPerMMBtuMarketPower(usdPrice);
-        } else {
-          usdPrice = previousValues[item.code];
+        if (item.code === "WTI_USD") {
+          usdPrice = previousValues["WTI_USD"];
           sats = satsPerBbl(usdPrice);
+        } else if (item.code === "NATURAL_GAS_USD") {
+          sats = satsPerBbl(usdPrice);
+        } else if (item.code === "M70S_NET") {
+          sats = satsPerMMBtuNet(usdPrice);
+        } else if (item.code === "PREMIUM") {
+          sats = miningPremium(usdPrice);
         }
 
         const card = document.createElement("div");
         card.className = `bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${item.color}-400 transition-all group relative cursor-help`;
-        card.title = item.code === "M70S_MARKET" 
-          ? `MicroBT M70S+ (244 TH/s @ 3.14 kW) • Paying market Nat Gas price • BTC: $${btcPrice.toLocaleString()}`
-          : `BTC: $${btcPrice.toLocaleString()} | ${item.label}: $${formatUSD(usdPrice)} / ${item.code.includes("GAS") ? "MMBtu" : "bbl"}`;
+        
+        let tooltipText = `BTC: $${btcPrice.toLocaleString()}`;
+        if (item.code === "M70S_NET") {
+          tooltipText += ` | M70S+ (244 TH/s @ 3.14 kW) paying market gas price`;
+        } else if (item.code === "PREMIUM") {
+          tooltipText += ` | Mining vs just selling raw Nat Gas`;
+        } else if (item.code === "NATURAL_GAS_USD") {
+          tooltipText += ` | Nat Gas: $${formatUSD(usdPrice)} / MMBtu`;
+        } else {
+          tooltipText += ` | WTI: $${formatUSD(usdPrice)} / bbl`;
+        }
+
+        card.title = tooltipText;
 
         card.innerHTML = `
           <div class="uppercase tracking-widest text-sm font-medium text-${item.color}-400">${item.label}</div>
@@ -176,37 +192,25 @@
       const now = Date.now();
       const shouldUpdateOil = (now - lastOilUpdate) > 300000;
 
-      const items = [
-        { code: "WTI_USD" },
-        { code: "NATURAL_GAS_USD" },
-        { code: "M70S_MARKET" }
+      const ngPrice = shouldUpdateOil ? await getCurrentOilPrice("NATURAL_GAS_USD") : previousValues["NATURAL_GAS_USD"];
+      const wtiPrice = shouldUpdateOil ? await getCurrentOilPrice("WTI_USD") : previousValues["WTI_USD"];
+
+      // Update previous values
+      previousValues["NATURAL_GAS_USD"] = ngPrice;
+      previousValues["WTI_USD"] = wtiPrice;
+
+      // Update all widgets
+      const updates = [
+        { code: "WTI_USD", value: satsPerBbl(wtiPrice) },
+        { code: "NATURAL_GAS_USD", value: satsPerBbl(ngPrice) },
+        { code: "M70S_NET", value: satsPerMMBtuNet(ngPrice) },
+        { code: "PREMIUM", value: miningPremium(ngPrice) }
       ];
 
-      for (const item of items) {
-        let usdPrice = 0;
-        let sats = 0;
-
-        if (item.code === "M70S_MARKET") {
-          usdPrice = shouldUpdateOil ? await getCurrentOilPrice("NATURAL_GAS_USD") : previousValues["NATURAL_GAS_USD"];
-          sats = satsPerMMBtuMarketPower(usdPrice);
-        } else {
-          usdPrice = shouldUpdateOil ? await getCurrentOilPrice(item.code) : previousValues[item.code];
-          sats = satsPerBbl(usdPrice);
-        }
-
-        const satsEl = document.getElementById(`sats-${item.code}`);
-        if (satsEl) satsEl.textContent = formatNumber(sats);
-
-        const card = satsEl ? satsEl.closest('div[title]') : null;
-        if (card) {
-          if (item.code === "M70S_MARKET") {
-            card.title = `M70S+ Market Power (244 TH/s • 3.14 kW) • Pays market gas price • BTC: $${btcPrice.toLocaleString()} | Nat Gas: $${formatUSD(usdPrice)}/MMBtu`;
-          } else {
-            const unit = item.code.includes("GAS") ? "MMBtu" : "bbl";
-            card.title = `BTC: $${btcPrice.toLocaleString()} | ${item.code === "WTI_USD" ? "WTI" : "Nat Gas"}: $${formatUSD(usdPrice)} / ${unit}`;
-          }
-        }
-      }
+      updates.forEach(update => {
+        const el = document.getElementById(`sats-${update.code}`);
+        if (el) el.textContent = formatNumber(update.value);
+      });
 
       if (shouldUpdateOil) lastOilUpdate = now;
     }
@@ -220,7 +224,7 @@
       ]);
 
       let labels = [];
-      let wtiSats = [], ngSats = [], miningSats = [];
+      let wtiSats = [], ngSats = [], netMiningSats = [];
 
       if (wtiHistory.length > 0) {
         labels = wtiHistory.map(h => {
@@ -230,7 +234,7 @@
 
         wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
         ngSats = ngHistory.map(h => satsPerBbl(h.price));
-        miningSats = ngHistory.map(h => satsPerMMBtuMarketPower(h.price));
+        netMiningSats = ngHistory.map(h => satsPerMMBtuNet(h.price));
       }
 
       if (chartInstance) chartInstance.destroy();
@@ -250,7 +254,7 @@
               yAxisID: 'y'
             },
             { 
-              label: 'Natural Gas (SATS/MMBtu)', 
+              label: 'Nat Gas (SATS/MMBtu)', 
               data: ngSats, 
               borderColor: '#f59e0b', 
               backgroundColor: 'rgba(245, 158, 11, 0.15)',
@@ -259,8 +263,8 @@
               yAxisID: 'y1'
             },
             { 
-              label: 'M70S+ Market Power (SATS/MMBtu)', 
-              data: miningSats, 
+              label: 'M70S+ Net (SATS/MMBtu after gas cost)', 
+              data: netMiningSats, 
               borderColor: '#38bdf8', 
               backgroundColor: 'rgba(56, 189, 248, 0.15)',
               tension: 0.4,
@@ -292,7 +296,10 @@
             }
           },
           plugins: {
-            legend: { position: 'top', labels: { color: '#ddd', font: { size: 14 }, usePointStyle: true } },
+            legend: { 
+              position: 'top', 
+              labels: { color: '#ddd', font: { size: 14 }, usePointStyle: true } 
+            },
             tooltip: {
               callbacks: {
                 title: (items) => items[0].label,
