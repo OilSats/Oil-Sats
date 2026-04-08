@@ -15,11 +15,12 @@
     <!-- Header -->
     <div class="flex justify-between items-center mb-12 border-b border-gray-800 pb-6">
       <div class="flex items-center gap-4">
-        <!-- Reliable Oil Drum + Bitcoin Logo -->
+        <!-- Stable Oil Drum + Bitcoin Logo -->
         <img 
-          src="https://i.imgur.com/8zK7vL2.png" 
+          src="https://i.ibb.co.com/0jK7vL2/oil-sats-logo.png" 
           alt="Oil Sats Logo" 
           class="w-16 h-16 object-contain"
+          onerror="this.src='https://via.placeholder.com/64x64/amber/000?text=OS'; console.log('Logo fallback used');"
         >
         <h1 class="text-3xl font-semibold tracking-tight">Oil Sats</h1>
       </div>
@@ -41,7 +42,7 @@
   <script>
     const API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a";
 
-    let btcPrice = 71450; // safe starting fallback
+    let btcPrice = 71450; // safe fallback
 
     async function getBTC() {
       try {
@@ -49,29 +50,32 @@
         const data = await res.json();
         btcPrice = data.bitcoin?.usd || 71450;
       } catch(e) {
-        console.error("BTC fetch failed");
+        console.error("BTC fetch failed - using fallback");
       }
     }
 
     async function getOilPrice(code) {
       try {
-        const res = await fetch(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}_USD&api_key=${API_KEY}`);
+        const url = `https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}_USD&api_key=${API_KEY}`;
+        const res = await fetch(url);
         const json = await res.json();
-        // Correct structure from the API
+        
         if (json.data && json.data.price) {
+          console.log(`${code} price fetched: $${json.data.price}`);
           return { price: parseFloat(json.data.price) };
         }
-        throw new Error("No price data");
+        
+        throw new Error("Invalid response structure");
       } catch(e) {
-        console.error(`Oil API failed for ${code}`);
-        // Realistic fallbacks
-        const fallbacks = { WTI: 72.50, BRENT: 75.80, WCS: 64.20 };
-        return { price: fallbacks[code.toUpperCase()] || 70 };
+        console.error(`Oil API failed for ${code} - using fallback`);
+        // Realistic fallbacks (updated April 2026 levels)
+        const fallbacks = { WTI: 94.5, BRENT: 94.0, WCS: 89.0 };
+        return { price: fallbacks[code.toUpperCase()] || 92 };
       }
     }
 
     function satsPerBbl(oilUsd) {
-      return Math.round((oilUsd / btcPrice) * 100000000);
+      return btcPrice > 0 ? Math.round((oilUsd / btcPrice) * 100000000) : 0;
     }
 
     function formatNumber(num) {
@@ -115,7 +119,7 @@
       await renderCards();
     }
 
-    // Initial load + auto-refresh
+    // Initial load + auto refresh
     renderCards();
     setInterval(renderCards, 60000);
   </script>
