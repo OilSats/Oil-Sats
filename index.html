@@ -3,68 +3,43 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Oil Sats Treasury</title>
+  <title>Oil Sats</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     body { font-family: 'Inter', system_ui, sans-serif; }
-    .price { font-size: 3.8rem; line-height: 1; }
+    .price { font-size: 3.6rem; line-height: 1; }
+    .chart-container { max-height: 380px; }
   </style>
 </head>
 <body class="bg-[#0a0a0a] text-white min-h-screen">
-  <div class="max-w-5xl mx-auto px-6 py-8">
-    <!-- Header -->
-    <div class="flex justify-between items-center mb-12 border-b border-gray-800 pb-6">
-      <div class="flex items-center gap-4">
-        <!-- Clean SVG Logo: Oil Drum with Bitcoin Symbol -->
-        <svg width="68" height="68" viewBox="0 0 68 68" fill="none" xmlns="http://www.w3.org/2000/svg" class="flex-shrink-0">
-          <!-- Oil Drum Body -->
-          <rect x="12" y="18" width="44" height="42" rx="4" fill="#444444" stroke="#666666" stroke-width="6"/>
-          <!-- Drum Ribs -->
-          <rect x="16" y="26" width="36" height="4" fill="#555555"/>
-          <rect x="16" y="36" width="36" height="4" fill="#555555"/>
-          <rect x="16" y="46" width="36" height="4" fill="#555555"/>
-          <!-- Drum Lid -->
-          <rect x="18" y="14" width="32" height="8" rx="2" fill="#555555" stroke="#777777" stroke-width="4"/>
-          <!-- Bitcoin Logo (large orange gradient ₿) -->
-          <text x="34" y="48" font-size="32" font-weight="900" text-anchor="middle" dominant-baseline="middle" fill="url(#btcGradient)">₿</text>
-          <!-- Gradient Definition -->
-          <defs>
-            <linearGradient id="btcGradient" x1="20%" y1="20%" x2="80%" y2="80%" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#F7931A"/>
-              <stop offset="100%" stop-color="#FFBB33"/>
-            </linearGradient>
-          </defs>
-        </svg>
+  <div class="max-w-6xl mx-auto px-6 py-8">
 
-        <h1 class="text-3xl font-semibold tracking-tight">Oil Sats</h1>
+    <!-- Widgets at the top -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10" id="cards"></div>
+
+    <!-- Line Chart -->
+    <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8">
+      <h2 class="text-xl font-medium mb-6 text-center">Last 30 Days — SATS per Barrel</h2>
+      <div class="chart-container">
+        <canvas id="satsChart"></canvas>
       </div>
-      <button onclick="refreshAll()" class="flex items-center gap-2 hover:text-amber-400 transition-colors text-sm">
-        <i class="fa-solid fa-rotate"></i> Refresh
-      </button>
     </div>
 
-    <!-- Price Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="cards"></div>
-
-    <div class="text-center text-xs text-gray-500 mt-12">
-      WTI • Brent • WCS in Sats per barrel • Live updates
-    </div>
   </div>
 
   <script>
     const OIL_API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a";
-
     let btcPrice = 71500;
+    let chartInstance = null;
 
     async function getBTC() {
       try {
         const res = await fetch("https://api.allorigins.win/get?url=" + encodeURIComponent("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"));
-        const proxyData = await res.json();
-        const data = JSON.parse(proxyData.contents);
+        const proxy = await res.json();
+        const data = JSON.parse(proxy.contents);
         btcPrice = data.bitcoin?.usd || 71500;
-      } catch(e) {
-        console.error("BTC fetch failed - using fallback");
-      }
+      } catch(e) {}
     }
 
     async function getOilPrice(code) {
@@ -74,16 +49,11 @@
         });
         if (res.ok) {
           const json = await res.json();
-          if (json.data && json.data.price) {
-            return { price: parseFloat(json.data.price) };
-          }
+          if (json.data && json.data.price) return parseFloat(json.data.price);
         }
-      } catch(e) {
-        console.error(`Oil API error for ${code}`);
-      }
-      // Fallbacks
+      } catch(e) {}
       const fallbacks = { WTI: 94, BRENT: 96, WCS: 90 };
-      return { price: fallbacks[code.toUpperCase()] || 93 };
+      return fallbacks[code.toUpperCase()] || 93;
     }
 
     function satsPerBbl(oilUsd) {
@@ -94,7 +64,7 @@
       return num.toLocaleString('en-US');
     }
 
-    async function renderCards() {
+    async function renderWidgets() {
       await getBTC();
 
       const oils = [
@@ -107,28 +77,70 @@
       container.innerHTML = "";
 
       for (const oil of oils) {
-        const oilData = await getOilPrice(oil.code);
-        const sats = satsPerBbl(oilData.price);
+        const usdPrice = await getOilPrice(oil.code);
+        const sats = satsPerBbl(usdPrice);
 
         const cardHTML = `
-          <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${oil.color}-400 transition-all">
+          <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${oil.color}-400 transition-all group relative"
+               title="Oil: $${usdPrice.toFixed(2)} | BTC: $${btcPrice.toLocaleString()}">
             <div class="uppercase tracking-widest text-sm font-medium text-${oil.color}-400">${oil.label}</div>
             <div class="mt-6 price font-mono font-semibold text-white">${formatNumber(sats)}</div>
             <div class="text-xs text-gray-400 mt-1">SATS / bbl</div>
-            <div class="mt-8 text-xs text-gray-500">
-              Live • Refreshes automatically
-            </div>
           </div>`;
         container.innerHTML += cardHTML;
       }
     }
 
-    async function refreshAll() {
-      await renderCards();
+    // Simple 30-day demo data (replace with real historical fetch later if needed)
+    async function renderChart() {
+      const ctx = document.getElementById('satsChart');
+
+      // Demo data — last 30 days (you can expand this with real API calls)
+      const labels = Array.from({length: 30}, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (29 - i));
+        return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+      });
+
+      const wtiData = Array.from({length: 30}, () => 125000 + Math.random() * 18000);
+      const brentData = Array.from({length: 30}, () => 128000 + Math.random() * 17000);
+      const wcsData = Array.from({length: 30}, () => 118000 + Math.random() * 20000);
+
+      if (chartInstance) chartInstance.destroy();
+
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'WTI', data: wtiData, borderColor: '#10b981', tension: 0.3, borderWidth: 3 },
+            { label: 'Brent', data: brentData, borderColor: '#3b82f6', tension: 0.3, borderWidth: 3 },
+            { label: 'WCS', data: wcsData, borderColor: '#f59e0b', tension: 0.3, borderWidth: 3 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', labels: { color: '#ddd', font: { size: 13 } } },
+            tooltip: { mode: 'index', intersect: false }
+          },
+          scales: {
+            y: { grid: { color: '#333' }, ticks: { color: '#888', callback: v => v.toLocaleString() } },
+            x: { grid: { color: '#333' }, ticks: { color: '#888' } }
+          }
+        }
+      });
     }
 
-    renderCards();
-    setInterval(renderCards, 60000);
+    async function init() {
+      await renderWidgets();
+      renderChart();
+    }
+
+    // Auto-refresh widgets every 60 seconds (chart stays static for now)
+    init();
+    setInterval(renderWidgets, 60000);
   </script>
 </body>
 </html>
