@@ -35,10 +35,10 @@
     let chartInstance = null;
     let lastOilUpdate = 0;
 
-    // Cache previous values to prevent flashing to 0
+    // Cache previous values
     let previousValues = {
-      "WTI_USD": 0,
-      "NATURAL_GAS_USD": 0
+      "WTI_USD": 94,
+      "NATURAL_GAS_USD": 3.5
     };
 
     async function getBTC() {
@@ -103,6 +103,10 @@
       return num.toLocaleString('en-US');
     }
 
+    function formatUSD(num) {
+      return num.toFixed(2);
+    }
+
     function createWidgets() {
       const items = [
         { code: "WTI_USD",       label: "WTI",    color: "emerald", unit: "SATS / bbl" },
@@ -113,12 +117,15 @@
       container.innerHTML = "";
 
       items.forEach(item => {
+        const usdPrice = previousValues[item.code];
+        const sats = satsPerBbl(usdPrice);
+
         const card = document.createElement("div");
         card.className = `bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${item.color}-400 transition-all group relative cursor-help`;
-        card.title = `${item.label} — updates every 5 min`;
+        card.title = `BTC: $${btcPrice.toLocaleString()} | ${item.label}: $${formatUSD(usdPrice)} / ${item.code.includes("GAS") ? "mmbtu" : "bbl"}`;
         card.innerHTML = `
           <div class="uppercase tracking-widest text-sm font-medium text-${item.color}-400">${item.label}</div>
-          <div id="sats-${item.code}" class="mt-6 price font-mono font-semibold text-white">${formatNumber(previousValues[item.code] ? satsPerBbl(previousValues[item.code]) : 0)}</div>
+          <div id="sats-${item.code}" class="mt-6 price font-mono font-semibold text-white">${formatNumber(sats)}</div>
           <div class="text-xs text-gray-400 mt-1">${item.unit}</div>
         `;
         container.appendChild(card);
@@ -142,6 +149,13 @@
 
         const satsEl = document.getElementById(`sats-${item.code}`);
         if (satsEl) satsEl.textContent = formatNumber(sats);
+
+        // Update tooltip with latest prices
+        const card = satsEl ? satsEl.closest('div[title]') : null;
+        if (card) {
+          const unit = item.code.includes("GAS") ? "mmbtu" : "bbl";
+          card.title = `BTC: $${btcPrice.toLocaleString()} | ${item.label}: $${formatUSD(usdPrice)} / ${unit}`;
+        }
       }
 
       if (shouldUpdateOil) lastOilUpdate = now;
@@ -161,7 +175,7 @@
       if (wtiHistory.length > 0) {
         labels = wtiHistory.map(h => {
           const d = h.date;
-          return isNaN(d.getTime()) ? '' : String(d.getDate()).padStart(2, '0'); // Only DD
+          return isNaN(d.getTime()) ? '' : String(d.getDate()).padStart(2, '0');
         });
 
         wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
@@ -214,31 +228,15 @@
               type: 'linear',
               position: 'left',
               grid: { color: '#333' },
-              ticks: { 
-                color: '#888', 
-                callback: v => v.toLocaleString() 
-              },
-              title: {
-                display: true,
-                text: 'SATS / bbl',
-                color: '#10b981',
-                font: { size: 13 }
-              }
+              ticks: { color: '#888', callback: v => v.toLocaleString() },
+              title: { display: true, text: 'SATS / bbl', color: '#10b981', font: { size: 13 } }
             },
             y1: {
               type: 'linear',
               position: 'right',
               grid: { drawOnChartArea: false },
-              ticks: { 
-                color: '#888', 
-                callback: v => v.toLocaleString() 
-              },
-              title: {
-                display: true,
-                text: 'SATS / mmbtu',
-                color: '#f59e0b',
-                font: { size: 13 }
-              }
+              ticks: { color: '#888', callback: v => v.toLocaleString() },
+              title: { display: true, text: 'SATS / mmbtu', color: '#f59e0b', font: { size: 13 } }
             }
           },
           plugins: {
