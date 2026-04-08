@@ -17,11 +17,11 @@
   <div class="max-w-6xl mx-auto px-6 py-8">
 
     <!-- Widgets -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10" id="cards"></div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10" id="cards"></div>
 
-    <!-- Historical Chart -->
+    <!-- Chart -->
     <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8">
-      <h2 class="text-xl font-medium mb-6 text-center">Last 30 Days — SATS per Barrel</h2>
+      <h2 class="text-xl font-medium mb-6 text-center">Last 30 Days — SATS per Barrel & per MMBtu</h2>
       <div class="chart-container">
         <canvas id="satsChart"></canvas>
       </div>
@@ -34,7 +34,6 @@
     let btcPrice = 71500;
     let chartInstance = null;
     let lastOilUpdate = 0;
-    let currentOilPrices = { "WTI_USD": 94, "BRENT_CRUDE_USD": 96, "WCS_CRUDE_USD": 90 };
 
     async function getBTC() {
       try {
@@ -45,7 +44,7 @@
         const data = await res.json();
         btcPrice = data.bitcoin?.usd || btcPrice;
       } catch (e) {
-        console.warn("BTC fetch failed, using cached price");
+        console.warn("BTC fetch failed");
       }
     }
 
@@ -59,14 +58,10 @@
         });
         if (res.ok) {
           const json = await res.json();
-          if (json.data && json.data.price) {
-            const price = parseFloat(json.data.price);
-            currentOilPrices[code] = price;
-            return price;
-          }
+          if (json.data && json.data.price) return parseFloat(json.data.price);
         }
       } catch (e) {}
-      return currentOilPrices[code] || 93;
+      return code.includes("GAS") ? 3.5 : 93; // fallback
     }
 
     async function getPastMonthPrices(code) {
@@ -98,28 +93,23 @@
       return num.toLocaleString('en-US');
     }
 
-    function formatUSD(num) {
-      return num.toFixed(2);
-    }
-
     function createWidgets() {
-      const oils = [
-        { code: "WTI_USD",       label: "WTI",    color: "emerald" },
-        { code: "BRENT_CRUDE_USD", label: "Brent",  color: "blue" },
-        { code: "WCS_CRUDE_USD", label: "WCS",    color: "amber" }
+      const items = [
+        { code: "WTI_USD",       label: "WTI",    color: "emerald", unit: "SATS / bbl" },
+        { code: "NATURAL_GAS_USD", label: "Nat Gas", color: "amber", unit: "SATS / mmbtu" }
       ];
 
       const container = document.getElementById("cards");
       container.innerHTML = "";
 
-      oils.forEach(oil => {
+      items.forEach(item => {
         const card = document.createElement("div");
-        card.className = `bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${oil.color}-400 transition-all group relative cursor-help`;
-        card.title = `BTC: $${btcPrice.toLocaleString()} | ${oil.label}: $${formatUSD(currentOilPrices[oil.code])} / bbl`;
+        card.className = `bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${item.color}-400 transition-all group relative cursor-help`;
+        card.title = `${item.label} — updates every 5 min`;
         card.innerHTML = `
-          <div class="uppercase tracking-widest text-sm font-medium text-${oil.color}-400">${oil.label}</div>
-          <div id="sats-${oil.code}" class="mt-6 price font-mono font-semibold text-white">0</div>
-          <div class="text-xs text-gray-400 mt-1">SATS / bbl</div>
+          <div class="uppercase tracking-widest text-sm font-medium text-${item.color}-400">${item.label}</div>
+          <div id="sats-${item.code}" class="mt-6 price font-mono font-semibold text-white">0</div>
+          <div class="text-xs text-gray-400 mt-1">${item.unit}</div>
         `;
         container.appendChild(card);
       });
@@ -131,23 +121,17 @@
       const now = Date.now();
       const shouldUpdateOil = (now - lastOilUpdate) > 300000;
 
-      const oils = [
-        { code: "WTI_USD",       label: "WTI",    color: "emerald" },
-        { code: "BRENT_CRUDE_USD", label: "Brent",  color: "blue" },
-        { code: "WCS_CRUDE_USD", label: "WCS",    color: "amber" }
+      const items = [
+        { code: "WTI_USD",       label: "WTI" },
+        { code: "NATURAL_GAS_USD", label: "Nat Gas" }
       ];
 
-      for (const oil of oils) {
-        const usdPrice = shouldUpdateOil ? await getCurrentOilPrice(oil.code) : currentOilPrices[oil.code];
+      for (const item of items) {
+        const usdPrice = shouldUpdateOil ? await getCurrentOilPrice(item.code) : 0;
         const sats = satsPerBbl(usdPrice);
 
-        const satsEl = document.getElementById(`sats-${oil.code}`);
+        const satsEl = document.getElementById(`sats-${item.code}`);
         if (satsEl) satsEl.textContent = formatNumber(sats);
-
-        const card = satsEl ? satsEl.closest('div[title]') : null;
-        if (card) {
-          card.title = `BTC: $${btcPrice.toLocaleString()} | ${oil.label}: $${formatUSD(usdPrice)} / bbl`;
-        }
       }
 
       if (shouldUpdateOil) lastOilUpdate = now;
@@ -156,28 +140,22 @@
     async function renderChart() {
       const ctx = document.getElementById('satsChart');
 
-      const [wtiHistory, brentHistory, wcsHistory] = await Promise.all([
+      const [wtiHistory, ngHistory] = await Promise.all([
         getPastMonthPrices("WTI_USD"),
-        getPastMonthPrices("BRENT_CRUDE_USD"),
-        getPastMonthPrices("WCS_CRUDE_USD")
+        getPastMonthPrices("NATURAL_GAS_USD")
       ]);
 
       let labels = [];
-      let wtiSats = [], brentSats = [], wcsSats = [];
+      let wtiSats = [], ngSats = [];
 
       if (wtiHistory.length > 0) {
         labels = wtiHistory.map(h => {
           const d = h.date;
-          if (isNaN(d.getTime())) return '';
-          const year = d.getFullYear();
-          const month = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          return `${year}/${month}/${day}`;
+          return isNaN(d.getTime()) ? '' : String(d.getDate()).padStart(2, '0');   // Only DD
         });
 
         wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
-        brentSats = brentHistory.map(h => satsPerBbl(h.price));
-        wcsSats = wcsHistory.map(h => satsPerBbl(h.price));
+        ngSats = ngHistory.map(h => satsPerBbl(h.price));
       }
 
       if (chartInstance) chartInstance.destroy();
@@ -188,37 +166,29 @@
           labels: labels,
           datasets: [
             { 
-              label: 'WTI', 
+              label: 'WTI (SATS/bbl)', 
               data: wtiSats, 
               borderColor: '#10b981', 
               backgroundColor: 'rgba(16, 185, 129, 0.15)',
               tension: 0.4,
               borderWidth: 3.5,
-              pointRadius: 0 
+              yAxisID: 'y'
             },
             { 
-              label: 'Brent', 
-              data: brentSats, 
-              borderColor: '#3b82f6', 
-              backgroundColor: 'rgba(59, 130, 246, 0.15)',
-              tension: 0.4,
-              borderWidth: 3.5,
-              pointRadius: 0 
-            },
-            { 
-              label: 'WCS', 
-              data: wcsSats, 
+              label: 'Natural Gas (SATS/mmbtu)', 
+              data: ngSats, 
               borderColor: '#f59e0b', 
               backgroundColor: 'rgba(245, 158, 11, 0.15)',
               tension: 0.4,
               borderWidth: 3.5,
-              pointRadius: 0 
+              yAxisID: 'y1'
             }
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
           scales: {
             x: {
               type: 'category',
@@ -226,13 +196,20 @@
               ticks: {
                 color: '#888',
                 maxTicksLimit: 8,
-                maxRotation: 45,
-                minRotation: 45,
-                autoSkip: true
+                maxRotation: 0,
+                minRotation: 0
               }
             },
             y: {
+              type: 'linear',
+              position: 'left',
               grid: { color: '#333' },
+              ticks: { color: '#888', callback: v => v.toLocaleString() }
+            },
+            y1: {
+              type: 'linear',
+              position: 'right',
+              grid: { drawOnChartArea: false },
               ticks: { color: '#888', callback: v => v.toLocaleString() }
             }
           },
@@ -243,7 +220,7 @@
             },
             tooltip: {
               callbacks: {
-                label: (ctx) => ctx.dataset.label + ": " + ctx.raw.toLocaleString() + " SATS/bbl"
+                label: (ctx) => ctx.dataset.label + ": " + ctx.raw.toLocaleString()
               }
             }
           }
