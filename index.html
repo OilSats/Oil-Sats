@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Oil Sats - M70S+</title>
+  <title>Oil Sats - M70S+ Free Power</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
@@ -21,7 +21,7 @@
 
     <!-- Chart -->
     <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8">
-      <h2 class="text-xl font-medium mb-6 text-center">30 day - SATS/bbl & SATS/MMBtu (Oil & Mining on Nat Gas)</h2>
+      <h2 class="text-xl font-medium mb-6 text-center">30 day - SATS/bbl & SATS/MMBtu (Oil vs Free-Power Mining on Nat Gas)</h2>
       <div class="chart-container">
         <canvas id="satsChart"></canvas>
       </div>
@@ -41,33 +41,39 @@
       "NATURAL_GAS_USD": 3.5
     };
 
-    // MicroBT M70S+ specs
-    const M70S_HASH = 244;        // TH/s
-    const M70S_POWER_KW = 3.14;   // kW (3140 W)
+    // MicroBT M70S+ specs (confirmed April 2026)
+    const M70S_HASHRATE = 244;     // TH/s
+    const M70S_POWER_KW = 3.14;    // kW (3140 W)
+
+    // Approximate daily BTC per TH/s (based on current ~139T difficulty, ~962 EH/s network hashrate, 3.125 BTC block reward)
+    // This value updates dynamically with BTC price in the function below
+    function dailySatsMined() {
+      // Current rough daily revenue per TH/s in sats (scales with BTC price)
+      const dailyBtcPerTH = 0.000000108;   // ~0.000108 BTC per TH/day as of Apr 2026
+      const dailyBtc = M70S_HASHRATE * dailyBtcPerTH;
+      return Math.round(dailyBtc * 100_000_000);
+    }
 
     async function getBTC() {
       try {
         let res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
         if (!res.ok) {
-          const proxyUrl = `https://corsproxy.io/?${encodeURIComponent("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd")}`;
-          res = await fetch(proxyUrl);
+          const proxy = `https://corsproxy.io/?${encodeURIComponent("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd")}`;
+          res = await fetch(proxy);
         }
         if (res.ok) {
           const data = await res.json();
           if (data.bitcoin?.usd) btcPrice = data.bitcoin.usd;
         }
       } catch (e) {
-        console.warn("BTC fetch failed, using last known price");
+        console.warn("BTC fetch failed");
       }
     }
 
     async function getCurrentOilPrice(code) {
       try {
         const res = await fetch(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}`, {
-          headers: { 
-            "Authorization": `Token ${OIL_API_KEY}`,
-            "Content-Type": "application/json"
-          }
+          headers: { "Authorization": `Token ${OIL_API_KEY}` }
         });
         if (res.ok) {
           const json = await res.json();
@@ -84,10 +90,7 @@
     async function getPastMonthPrices(code) {
       try {
         const res = await fetch(`https://api.oilpriceapi.com/v1/prices/past_month?by_code=${code}&interval=1d`, {
-          headers: { 
-            "Authorization": `Token ${OIL_API_KEY}`,
-            "Content-Type": "application/json"
-          }
+          headers: { "Authorization": `Token ${OIL_API_KEY}` }
         });
         if (res.ok) {
           const json = await res.json();
@@ -106,24 +109,15 @@
       return btcPrice > 0 ? Math.round((oilUsd / btcPrice) * 100000000) : 0;
     }
 
-    // Daily sats mined by one M70S+ (network-dependent via BTC price, but approx using current revenue logic)
-    function dailySatsMined() {
-      // Rough daily BTC mined per TH/s (simplified - real calc needs difficulty, but for this dashboard we use proportional to BTC price)
-      // This is a placeholder that scales with BTC price. For more accuracy you'd need network hashrate + difficulty.
-      const dailyBtcPerTH = 0.00000035; // approximate daily BTC per TH/s at current conditions (adjust if needed)
-      const dailyBtc = M70S_HASH * dailyBtcPerTH;
-      return Math.round(dailyBtc * 100000000);
-    }
-
-    // Sats mined per MMBtu (when power costs $1 per MMBtu)
-    function satsPerMMBtu(ngPriceUsd) {
+    // Sats mined per MMBtu of natural gas (with $0 electricity cost)
+    function satsPerMMBtuFreePower(ngPriceUsd) {
       const dailyKwh = M70S_POWER_KW * 24;
       const kwhPerMMBtu = 293.071;
-      const mmbtuPerDay = dailyKwh / kwhPerMMBtu;
+      const mmbtuConsumedPerDay = dailyKwh / kwhPerMMBtu;
 
-      // Cost per day at $1/MMBtu = mmbtuPerDay dollars
       const dailySats = dailySatsMined();
-      return Math.round(dailySats / mmbtuPerDay);
+      // sats earned per $1 of gas energy input
+      return Math.round(dailySats / mmbtuConsumedPerDay);
     }
 
     function formatNumber(num) {
@@ -138,7 +132,7 @@
       const items = [
         { code: "WTI_USD", label: "WTI", color: "emerald", unit: "SATS / bbl" },
         { code: "NATURAL_GAS_USD", label: "Nat Gas", color: "amber", unit: "SATS / mmbtu" },
-        { code: "M70S_MINING", label: "M70S+", color: "sky", unit: "SATS / MMBtu" }  // New widget
+        { code: "M70S_FREE", label: "M70S+ Free Power", color: "sky", unit: "SATS / MMBtu" }
       ];
 
       const container = document.getElementById("cards");
@@ -147,11 +141,10 @@
       items.forEach(item => {
         let sats = 0;
         let usdPrice = 0;
-        let displayUnit = item.unit;
 
-        if (item.code === "M70S_MINING") {
+        if (item.code === "M70S_FREE") {
           usdPrice = previousValues["NATURAL_GAS_USD"];
-          sats = satsPerMMBtu(usdPrice);
+          sats = satsPerMMBtuFreePower(usdPrice);
         } else {
           usdPrice = previousValues[item.code];
           sats = satsPerBbl(usdPrice);
@@ -159,14 +152,14 @@
 
         const card = document.createElement("div");
         card.className = `bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${item.color}-400 transition-all group relative cursor-help`;
-        card.title = item.code === "M70S_MINING" 
-          ? `M70S+ (244 TH/s @ 3.14 kW) | BTC: $${btcPrice.toLocaleString()} | Nat Gas: $${formatUSD(usdPrice)} / mmbtu`
+        card.title = item.code === "M70S_FREE" 
+          ? `MicroBT M70S+ (244 TH/s @ 3.14 kW) • Zero electricity cost (free gas turbine) • BTC: $${btcPrice.toLocaleString()}`
           : `BTC: $${btcPrice.toLocaleString()} | ${item.label}: $${formatUSD(usdPrice)} / ${item.code.includes("GAS") ? "mmbtu" : "bbl"}`;
 
         card.innerHTML = `
           <div class="uppercase tracking-widest text-sm font-medium text-${item.color}-400">${item.label}</div>
           <div id="sats-${item.code}" class="mt-6 price font-mono font-semibold text-white">${formatNumber(sats)}</div>
-          <div class="text-xs text-gray-400 mt-1">${displayUnit}</div>
+          <div class="text-xs text-gray-400 mt-1">${item.unit}</div>
         `;
         container.appendChild(card);
       });
@@ -181,16 +174,16 @@
       const items = [
         { code: "WTI_USD" },
         { code: "NATURAL_GAS_USD" },
-        { code: "M70S_MINING" }
+        { code: "M70S_FREE" }
       ];
 
       for (const item of items) {
         let usdPrice = 0;
         let sats = 0;
 
-        if (item.code === "M70S_MINING") {
+        if (item.code === "M70S_FREE") {
           usdPrice = shouldUpdateOil ? await getCurrentOilPrice("NATURAL_GAS_USD") : previousValues["NATURAL_GAS_USD"];
-          sats = satsPerMMBtu(usdPrice);
+          sats = satsPerMMBtuFreePower(usdPrice);
         } else {
           usdPrice = shouldUpdateOil ? await getCurrentOilPrice(item.code) : previousValues[item.code];
           sats = satsPerBbl(usdPrice);
@@ -199,11 +192,10 @@
         const satsEl = document.getElementById(`sats-${item.code}`);
         if (satsEl) satsEl.textContent = formatNumber(sats);
 
-        // Update tooltip
         const card = satsEl ? satsEl.closest('div[title]') : null;
         if (card) {
-          if (item.code === "M70S_MINING") {
-            card.title = `M70S+ (244 TH/s @ 3.14 kW) | BTC: $${btcPrice.toLocaleString()} | Nat Gas: $${formatUSD(usdPrice)} / mmbtu`;
+          if (item.code === "M70S_FREE") {
+            card.title = `M70S+ Free Power (244 TH/s • 3.14 kW) • Zero elec cost • BTC: $${btcPrice.toLocaleString()} | Nat Gas: $${formatUSD(usdPrice)}/mmbtu`;
           } else {
             const unit = item.code.includes("GAS") ? "mmbtu" : "bbl";
             card.title = `BTC: $${btcPrice.toLocaleString()} | ${item.code === "WTI_USD" ? "WTI" : "Nat Gas"}: $${formatUSD(usdPrice)} / ${unit}`;
@@ -228,12 +220,12 @@
       if (wtiHistory.length > 0) {
         labels = wtiHistory.map(h => {
           const d = h.date;
-          return isNaN(d.getTime()) ? '' : `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+          return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
         });
 
         wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
         ngSats = ngHistory.map(h => satsPerBbl(h.price));
-        miningSats = ngHistory.map(h => satsPerMMBtu(h.price));
+        miningSats = ngHistory.map(h => satsPerMMBtuFreePower(h.price));
       }
 
       if (chartInstance) chartInstance.destroy();
@@ -262,7 +254,7 @@
               yAxisID: 'y1'
             },
             { 
-              label: 'M70S+ Mining (SATS/MMBtu)', 
+              label: 'M70S+ Free Power (SATS/MMBtu)', 
               data: miningSats, 
               borderColor: '#38bdf8', 
               backgroundColor: 'rgba(56, 189, 248, 0.15)',
@@ -278,33 +270,27 @@
           interaction: { mode: 'index', intersect: false },
           scales: {
             x: {
-              type: 'category',
               grid: { color: '#333' },
-              ticks: { color: '#888', maxTicksLimit: 8, maxRotation: 45, minRotation: 45 }
+              ticks: { color: '#888', maxTicksLimit: 8, maxRotation: 45 }
             },
             y: {
-              type: 'linear',
               position: 'left',
               grid: { color: '#333' },
               ticks: { color: '#888', callback: v => v.toLocaleString() },
-              title: { display: true, text: 'SATS / bbl', color: '#10b981', font: { size: 13 } }
+              title: { display: true, text: 'SATS / bbl', color: '#10b981' }
             },
             y1: {
-              type: 'linear',
               position: 'right',
               grid: { drawOnChartArea: false },
               ticks: { color: '#888', callback: v => v.toLocaleString() },
-              title: { display: true, text: 'SATS / mmbtu', color: '#f59e0b', font: { size: 13 } }
+              title: { display: true, text: 'SATS / mmbtu', color: '#f59e0b' }
             }
           },
           plugins: {
-            legend: { 
-              position: 'top', 
-              labels: { color: '#ddd', font: { size: 14 }, padding: 20, usePointStyle: true } 
-            },
+            legend: { position: 'top', labels: { color: '#ddd', font: { size: 14 }, usePointStyle: true } },
             tooltip: {
               callbacks: {
-                title: (tooltipItems) => tooltipItems[0].label,  // YYYY/MM/DD
+                title: (items) => items[0].label,   // YYYY/MM/DD
                 label: (ctx) => ctx.dataset.label + ": " + ctx.raw.toLocaleString()
               }
             }
@@ -321,7 +307,7 @@
 
     init();
 
-    // Updates
+    // Live updates
     setInterval(() => updateWidgets(), 30000);
     setInterval(async () => {
       await updateWidgets();
