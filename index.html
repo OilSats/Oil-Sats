@@ -7,18 +7,46 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: 'Inter', system_ui, sans-serif; }
-    .widget-value { font-size: 2.65rem; line-height: 1.05; font-weight: 600; font-family: monospace; }
-    @media (max-width: 640px) { .widget-value { font-size: 2.05rem; } }
+
+    .widget-value {
+      font-size: 2.65rem;
+      line-height: 1.05;
+      font-weight: 600;
+      font-family: monospace;
+    }
+
+    @media (max-width: 640px) { .widget-value { font-size: 2.0rem; } }
     @media (min-width: 641px) and (max-width: 1024px) { .widget-value { font-size: 2.35rem; } }
 
-    .widget-card { position: relative; }
-    .widget-card .tooltip {
-      visibility: hidden; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
-      background-color: #1f2937; color: #e5e7eb; padding: 12px 16px; border-radius: 8px;
-      font-size: 0.85rem; line-height: 1.4; z-index: 50; opacity: 0; transition: all 0.2s ease;
-      box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); margin-bottom: 10px; white-space: pre-line;
+    .widget-card {
+      position: relative;
     }
-    .widget-card:hover .tooltip, .widget-card:active .tooltip { visibility: visible; opacity: 1; }
+
+    .widget-card .tooltip {
+      visibility: hidden;
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #1f2937;
+      color: #e5e7eb;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      line-height: 1.4;
+      z-index: 50;
+      opacity: 0;
+      transition: all 0.2s ease;
+      box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
+      margin-bottom: 10px;
+      white-space: pre-line;
+    }
+
+    .widget-card:hover .tooltip,
+    .widget-card:active .tooltip {
+      visibility: visible;
+      opacity: 1;
+    }
   </style>
 </head>
 <body class="bg-[#0a0a0a] text-white min-h-screen">
@@ -37,31 +65,38 @@
 
     const GAS_VOLUME_M3_PER_DAY = 20000;
     const M70S_HASHRATE = 244;
-    const M70S_POWER_KW = 3.14;
-    const TOTAL_INVEST_CAD = 20350000;   // $16.5M base + $3.85M sound = C$20.35M
+    const TOTAL_INVEST_CAD = 20350000;   // C$20.35M all-in
 
-    function dailySatsMinedPerUnit(scenario) {
-      if (scenario === "bear") return Math.round(M70S_HASHRATE * 400);
-      if (scenario === "base") return Math.round(M70S_HASHRATE * 475);
-      if (scenario === "bull") return Math.round(M70S_HASHRATE * 550);
-      return Math.round(M70S_HASHRATE * 475);
+    function dailySatsMinedPerUnit(scenario, isPostHalving = false) {
+      let base = 475;
+      if (scenario === "bear") base = 400;
+      if (scenario === "bull") base = 550;
+
+      if (isPostHalving) base = Math.round(base * 0.55); // Conservative post-halving adjustment
+      return Math.round(M70S_HASHRATE * base);
     }
 
     function satsPerGJ_AECO() {
       return btcPrice > 0 ? Math.round((aecoPrice / btcPrice) * 100000000) : 0;
     }
 
-    function satsPerGJ_Mining(scenario) {
+    function satsPerGJ_Mining(scenario, isPostHalving = false) {
       const dailyKwh = M70S_POWER_KW * 24;
       const kwhPerGJ = 277.8;
       const gjPerDay = dailyKwh / kwhPerGJ;
-      const dailySats = dailySatsMinedPerUnit(scenario);
+      const dailySats = dailySatsMinedPerUnit(scenario, isPostHalving);
       return Math.round(dailySats / gjPerDay);
     }
 
-    function getSetupMetrics(scenario) {
+    function miningPremium() {
+      const mining = satsPerGJ_Mining("base");
+      const gas = satsPerGJ_AECO();
+      return gas > 0 ? (mining / gas).toFixed(1) : "0";
+    }
+
+    function getSetupMetrics(scenario, isPostHalving = false) {
       const gjPerDay = GAS_VOLUME_M3_PER_DAY * 0.0353;
-      const satsPerGJ = satsPerGJ_Mining(scenario);
+      const satsPerGJ = satsPerGJ_Mining(scenario, isPostHalving);
       const totalDailySats = Math.round(satsPerGJ * gjPerDay);
 
       const dailyRevUSD = (totalDailySats / 100000000) * btcPrice;
@@ -74,29 +109,37 @@
     function formatCAD(num) { return 'C$' + num.toLocaleString('en-US'); }
 
     function createWidgets() {
-      const bear = getSetupMetrics("bear");
-      const base = getSetupMetrics("base");
-      const bull = getSetupMetrics("bull");
+      const bearNow = getSetupMetrics("bear", false);
+      const baseNow = getSetupMetrics("base", false);
+      const bullNow = getSetupMetrics("bull", false);
+
+      const bearPost = getSetupMetrics("bear", true);
+      const basePost = getSetupMetrics("base", true);
+      const bullPost = getSetupMetrics("bull", true);
 
       const items = [
-        { code: "WTI", label: "WTI", color: "emerald", value: formatNumber(Math.round((94 / btcPrice) * 1e8)), unit: "SATS / bbl", 
-          tooltip: `WTI: $94.00 / bbl\nBTC: $${btcPrice.toLocaleString()} / BTC` },
+        { code: "WTI", label: "WTI", color: "emerald", value: formatNumber(Math.round((94 / btcPrice) * 1e8)), 
+          unit: "SATS / bbl", tooltip: `WTI: $94.00 / bbl\nBTC: $${btcPrice.toLocaleString()} / BTC` },
 
-        { code: "AECO", label: "AECO Alberta", color: "amber", value: formatNumber(Math.round((aecoPrice / btcPrice) * 1e8)), unit: "SATS / GJ", 
-          tooltip: `AECO: C$${aecoPrice.toFixed(2)} / GJ` },
+        { code: "AECO", label: "AECO Alberta", color: "amber", value: formatNumber(satsPerGJ_AECO()), 
+          unit: "SATS / GJ", tooltip: `AECO: C$${aecoPrice.toFixed(2)} / GJ` },
 
-        { code: "MINING", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_Mining("base")), unit: "SATS / GJ", 
-          tooltip: "Revenue per GJ using own stranded gas" },
+        { code: "MINING", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_Mining("base")), 
+          unit: "SATS / GJ", tooltip: "Base case mining revenue per GJ (own gas)" },
 
-        { code: "PREMIUM", label: "Mining Premium", color: "violet", value: (satsPerGJ_Mining("base") / Math.round((aecoPrice / btcPrice) * 1e8)).toFixed(1), unit: "×", 
-          tooltip: "Mining vs selling raw AECO gas" },
+        { code: "PREMIUM", label: "Mining Premium", color: "violet", value: miningPremium(), 
+          unit: "×", tooltip: "Mining vs selling raw AECO gas (Base case)" },
 
         { code: "DAILY_NOW", label: "Daily Sats (Now)", color: "cyan", 
-          value: `${formatNumber(bear.totalDailySats)} / ${formatNumber(base.totalDailySats)} / ${formatNumber(bull.totalDailySats)}`, 
-          unit: "Bear / Base / Bull", tooltip: "Daily sats from 20 e³m³/d" },
+          value: `${formatNumber(bearNow.totalDailySats)} / ${formatNumber(baseNow.totalDailySats)} / ${formatNumber(bullNow.totalDailySats)}`, 
+          unit: "Bear / Base / Bull", tooltip: "Daily sats • Pre-halving" },
+
+        { code: "DAILY_POST", label: "Daily Sats (Post 2028)", color: "purple", 
+          value: `${formatNumber(bearPost.totalDailySats)} / ${formatNumber(basePost.totalDailySats)} / ${formatNumber(bullPost.totalDailySats)}`, 
+          unit: "Bear / Base / Bull", tooltip: "Daily sats • After 2028 halving" },
 
         { code: "PAYBACK", label: "Payback Period", color: "lime", 
-          value: `${bear.paybackMonths} / ${base.paybackMonths} / ${bull.paybackMonths}`, 
+          value: `${bearNow.paybackMonths} / ${baseNow.paybackMonths} / ${bullNow.paybackMonths}`, 
           unit: "Bear / Base / Bull (months)", 
           tooltip: `Time to recover C$${TOTAL_INVEST_CAD.toLocaleString()} at $${btcPrice.toLocaleString()} USD/BTC\nPower Law R² = 0.96` }
       ];
@@ -118,7 +161,6 @@
       });
     }
 
-    // Simple refresh (no heavy API dependency for now)
     function init() {
       createWidgets();
     }
