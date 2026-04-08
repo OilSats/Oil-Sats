@@ -32,8 +32,8 @@
 
     // Mining Setup for 20 e³m³/d (20,000 m³/day)
     const GAS_VOLUME_M3_PER_DAY = 20000;
-    const M70S_HASHRATE = 244;     // TH/s per unit
-    const M70S_POWER_KW = 3.14;    // kW per unit
+    const M70S_HASHRATE = 244;
+    const M70S_POWER_KW = 3.14;
 
     const CORS_PROXY = "https://corsproxy.io/?";
 
@@ -93,7 +93,6 @@
       return gasSats > 0 ? (ownGasSats / gasSats).toFixed(1) : "0";
     }
 
-    // Calculations for 20 e³m³/d setup
     function getSetupMetrics() {
       const m3PerDay = GAS_VOLUME_M3_PER_DAY;
       const m3PerMMBtu = 28.3;
@@ -102,19 +101,20 @@
       const satsPerMMBtu = satsPerMMBtuOwnGas();
       const totalDailySats = Math.round(satsPerMMBtu * mmbtuPerDay);
 
-      // Initial Investment (realistic 2026 turnkey cost)
-      const initialInvestmentUSD = 12000000; // $12 million
+      const baseCapexUSD = 12000000;           // $12M base (ASICs + gensets + infrastructure)
+      const soundMitigationUSD = 2800000;      // $2.8M for high-performance sound mitigation to ~40 dBA
 
-      // Daily revenue in USD
+      const totalInvestmentUSD = baseCapexUSD + soundMitigationUSD;
+
       const dailyRevenueUSD = (totalDailySats / 100000000) * btcPrice;
-
-      // Payback
-      const paybackDays = Math.round(initialInvestmentUSD / dailyRevenueUSD);
+      const paybackDays = Math.round(totalInvestmentUSD / dailyRevenueUSD);
       const paybackMonths = (paybackDays / 30).toFixed(1);
 
       return {
         totalDailySats,
-        initialInvestmentUSD,
+        baseInvestment: baseCapexUSD,
+        soundMitigation: soundMitigationUSD,
+        totalInvestment: totalInvestmentUSD,
         dailyRevenueUSD: Math.round(dailyRevenueUSD),
         paybackMonths
       };
@@ -132,55 +132,15 @@
       const metrics = getSetupMetrics();
 
       const items = [
-        { 
-          code: "WTI_USD", 
-          label: "WTI", 
-          color: "emerald", 
-          value: formatNumber(satsPerBbl(previousValues["WTI_USD"] || 94)),
-          unit: "SATS / bbl" 
-        },
-        { 
-          code: "NATURAL_GAS_USD", 
-          label: "Nat Gas", 
-          color: "amber", 
-          value: formatNumber(satsPerBbl(previousValues["NATURAL_GAS_USD"])),
-          unit: "SATS / MMBtu" 
-        },
-        { 
-          code: "M70S_OWN", 
-          label: "M70S+ Own Gas", 
-          color: "sky", 
-          value: formatNumber(satsPerMMBtuOwnGas()),
-          unit: "SATS / MMBtu (free gas)" 
-        },
-        { 
-          code: "PREMIUM", 
-          label: "Mining Premium", 
-          color: "violet", 
-          value: miningPremium(previousValues["NATURAL_GAS_USD"]),
-          unit: "× vs Selling Gas" 
-        },
-        { 
-          code: "DAILY_SATS", 
-          label: "Daily Sats", 
-          color: "cyan", 
-          value: formatNumber(metrics.totalDailySats),
-          unit: "SATS / DAY (20 e³m³/d)" 
-        },
-        { 
-          code: "INVESTMENT", 
-          label: "Initial Investment", 
-          color: "rose", 
-          value: formatUSD(metrics.initialInvestmentUSD),
-          unit: "for 20 e³m³/d" 
-        },
-        { 
-          code: "PAYBACK", 
-          label: "Payback Period", 
-          color: "lime", 
-          value: metrics.paybackMonths + " months",
-          unit: "20 e³m³/d Setup" 
-        }
+        { code: "WTI_USD", label: "WTI", color: "emerald", value: formatNumber(satsPerBbl(previousValues["WTI_USD"] || 94)), unit: "SATS / bbl" },
+        { code: "NATURAL_GAS_USD", label: "Nat Gas", color: "amber", value: formatNumber(satsPerBbl(previousValues["NATURAL_GAS_USD"])), unit: "SATS / MMBtu" },
+        { code: "M70S_OWN", label: "M70S+ Own Gas", color: "sky", value: formatNumber(satsPerMMBtuOwnGas()), unit: "SATS / MMBtu (free gas)" },
+        { code: "PREMIUM", label: "Mining Premium", color: "violet", value: miningPremium(previousValues["NATURAL_GAS_USD"]), unit: "× vs Selling Gas" },
+        { code: "DAILY_SATS", label: "Daily Sats", color: "cyan", value: formatNumber(metrics.totalDailySats), unit: "SATS / DAY (20 e³m³/d)" },
+        { code: "INVESTMENT", label: "Base Investment", color: "rose", value: formatUSD(metrics.baseInvestment), unit: "ASICs + Infrastructure" },
+        { code: "SOUND", label: "Sound Mitigation", color: "orange", value: formatUSD(metrics.soundMitigation), unit: "to ~40 dBA" },
+        { code: "TOTAL_INVEST", label: "Total Investment", color: "red", value: formatUSD(metrics.totalInvestment), unit: "incl. Sound Mitigation" },
+        { code: "PAYBACK", label: "Payback Period", color: "lime", value: metrics.paybackMonths + " months", unit: "20 e³m³/d Setup" }
       ];
 
       const container = document.getElementById("cards");
@@ -189,7 +149,7 @@
       items.forEach(item => {
         const card = document.createElement("div");
         card.className = `bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${item.color}-400 transition-all group relative cursor-help`;
-        card.title = `BTC: $${btcPrice.toLocaleString()} | Using own stranded gas`;
+        card.title = `BTC: $${btcPrice.toLocaleString()} | Using own stranded gas • Sound reduced to residential-friendly ~40 dBA`;
 
         card.innerHTML = `
           <div class="uppercase tracking-widest text-sm font-medium text-${item.color}-400">${item.label}</div>
@@ -214,14 +174,15 @@
 
       const metrics = getSetupMetrics();
 
-      // Update all values
       const updates = {
         "WTI_USD": formatNumber(satsPerBbl(wtiPrice)),
         "NATURAL_GAS_USD": formatNumber(satsPerBbl(ngPrice)),
         "M70S_OWN": formatNumber(satsPerMMBtuOwnGas()),
         "PREMIUM": miningPremium(ngPrice),
         "DAILY_SATS": formatNumber(metrics.totalDailySats),
-        "INVESTMENT": formatUSD(metrics.initialInvestmentUSD),
+        "INVESTMENT": formatUSD(metrics.baseInvestment),
+        "SOUND": formatUSD(metrics.soundMitigation),
+        "TOTAL_INVEST": formatUSD(metrics.totalInvestment),
         "PAYBACK": metrics.paybackMonths + " months"
       };
 
