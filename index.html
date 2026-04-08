@@ -15,9 +15,14 @@
   <div class="max-w-5xl mx-auto px-6 py-8">
     <!-- Header -->
     <div class="flex justify-between items-center mb-12 border-b border-gray-800 pb-6">
-      <div class="flex items-center gap-3">
-        <i class="fa-solid fa-oil-can text-3xl text-amber-400"></i>
-        <h1 class="text-3xl font-semibold tracking-tight">Oil Sats Treasury</h1>
+      <div class="flex items-center gap-4">
+        <!-- New Logo: Oil Drum with Bitcoin Symbol -->
+        <img 
+          src="https://files.oaiusercontent.com/file-Vl3vXb8fK9pL2mN7qR8sT9uV?se=2026-04-09T00%3A00%3A00Z&sp=r&sv=2024-08-04&sr=b&rscc=max-age%3D31536000%2C%20immutable&rscd=attachment%3B%20filename%3D2041921262063382531.png" 
+          alt="Oil Sats Logo" 
+          class="w-12 h-12 object-contain"
+        >
+        <h1 class="text-3xl font-semibold tracking-tight">Oil Sats</h1>
       </div>
       <div class="flex items-center gap-6 text-sm">
         <button onclick="refreshAll()" class="flex items-center gap-2 hover:text-amber-400 transition">
@@ -37,7 +42,7 @@
   </div>
 
   <script>
-    const API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a";   // Your key is already here
+    const API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a";
 
     let btcPrice = 0;
 
@@ -56,7 +61,7 @@
         return data.data || { price: 0 };
       } catch(e) {
         console.log("Oil fetch error for", code);
-        return { price: 85 }; // fallback
+        return { price: 85 };
       }
     }
 
@@ -115,7 +120,6 @@
       await renderCards();
     }
 
-    // Load immediately + auto refresh every 60 seconds
     renderCards();
     setInterval(renderCards, 60000);
   </script>
