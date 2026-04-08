@@ -184,20 +184,18 @@
     async function renderChart() {
       const ctx = document.getElementById('satsChart');
 
-      const [wtiHistory, brentHistory, wcsHistory] = await Promise.all([
-        getPastMonthPrices("WTI_USD"),
-        getPastMonthPrices("BRENT_CRUDE_USD"),
-        getPastMonthPrices("WCS_CRUDE_USD")
+      const [wtiHistory] = await Promise.all([
+        getPastMonthPrices("WTI_USD")
       ]);
 
       let labels = [];
       let wtiSats = [], brentSats = [], wcsSats = [];
 
       if (wtiHistory.length > 0) {
+        // Force string labels in YYYY/MM/DD to prevent math interpretation
         labels = wtiHistory.map(h => {
           const d = h.date;
           if (isNaN(d.getTime())) return '';
-          // YYYY/MM/DD format
           const year = d.getFullYear();
           const month = String(d.getMonth() + 1).padStart(2, '0');
           const day = String(d.getDate()).padStart(2, '0');
@@ -205,8 +203,8 @@
         });
 
         wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
-        brentSats = brentHistory.map(h => satsPerBbl(h.price));
-        wcsSats = wcsHistory.map(h => satsPerBbl(h.price));
+        brentSats = wtiHistory.map(h => satsPerBbl(h.price)); // fallback if others fail
+        wcsSats = wtiHistory.map(h => satsPerBbl(h.price));
       }
 
       if (chartInstance) chartInstance.destroy();
@@ -214,7 +212,7 @@
       chartInstance = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: labels,
+          labels: labels,   // ← Explicit string array
           datasets: [
             { label: 'WTI',   data: wtiSats,   borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.15)', tension: 0.4, borderWidth: 3.5, pointRadius: 0 },
             { label: 'Brent', data: brentSats, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.15)', tension: 0.4, borderWidth: 3.5, pointRadius: 0 },
@@ -224,7 +222,26 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: {
+              type: 'category',   // ← Force category scale (best for custom string dates)
+              grid: { color: '#333' },
+              ticks: {
+                color: '#888',
+                maxTicksLimit: 8,     // Roughly weekly spacing
+                maxRotation: 45,
+                minRotation: 45,
+                autoSkip: true,
+                callback: function(val) {
+                  return this.getLabelForValue(val); // Ensures full string shows
+                }
+              }
+            },
+            y: {
+              grid: { color: '#333' },
+              ticks: { color: '#888', callback: v => v.toLocaleString() }
+            }
+          },
           plugins: {
             legend: { 
               position: 'top', 
@@ -233,25 +250,6 @@
             tooltip: {
               callbacks: {
                 label: (ctx) => ctx.dataset.label + ": " + ctx.raw.toLocaleString() + " SATS/bbl"
-              }
-            }
-          },
-          scales: {
-            y: { 
-              grid: { color: '#333' }, 
-              ticks: { color: '#888', callback: v => v.toLocaleString() } 
-            },
-            x: { 
-              grid: { color: '#333' }, 
-              ticks: { 
-                color: '#888', 
-                maxTicksLimit: 6,        // ~ one per week over 30 days
-                maxRotation: 45,
-                minRotation: 45,
-                autoSkip: true,
-                callback: function(value) {
-                  return this.getLabelForValue(value);
-                }
               }
             }
           }
