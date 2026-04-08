@@ -9,11 +9,37 @@
   <style>
     body { font-family: 'Inter', system_ui, sans-serif; }
     .price { font-size: 3.6rem; line-height: 1; }
-    .chart-container { height: 520px; }
+    .chart-container { height: 480px; }
+
+    /* Saylor GIF styling - fixed on sides */
+    .saylor-gif {
+      position: fixed;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 180px;
+      height: auto;
+      opacity: 0.85;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .saylor-left { left: 20px; }
+    .saylor-right { right: 20px; }
+
+    @media (max-width: 1024px) {
+      .saylor-gif { display: none; } /* Hide on smaller screens to avoid overlap */
+    }
   </style>
 </head>
-<body class="bg-[#0a0a0a] text-white min-h-screen">
-  <div class="max-w-6xl mx-auto px-6 py-8">
+<body class="bg-[#0a0a0a] text-white min-h-screen overflow-x-hidden">
+  <!-- Left Saylor GIF -->
+  <img src="https://tenor.com/view/there-is-no-second-best-asset-btc-bitcoin-saylor-gif-10963298944154952849" 
+       class="saylor-gif saylor-left" alt="There is no second best - Michael Saylor">
+
+  <!-- Right Saylor GIF -->
+  <img src="https://tenor.com/view/there-is-no-second-best-asset-btc-bitcoin-saylor-gif-10963298944154952849" 
+       class="saylor-gif saylor-right" alt="There is no second best - Michael Saylor">
+
+  <div class="max-w-6xl mx-auto px-6 py-8 relative">
 
     <!-- Widgets -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10" id="cards"></div>
@@ -33,6 +59,7 @@
     let btcPrice = 71500;
     let chartInstance = null;
     let lastOilUpdate = 0;
+    let currentOilPrices = { "WTI_USD": 94, "BRENT_CRUDE_USD": 96, "WCS_CRUDE_USD": 90 }; // cache for tooltips
 
     // Fast BTC update
     async function getBTC() {
@@ -60,11 +87,14 @@
         });
         if (res.ok) {
           const json = await res.json();
-          if (json.data && json.data.price) return parseFloat(json.data.price);
+          if (json.data && json.data.price) {
+            const price = parseFloat(json.data.price);
+            currentOilPrices[code] = price;
+            return price;
+          }
         }
       } catch (e) {}
-      const fallbacks = { "WTI_USD": 94, "BRENT_CRUDE_USD": 96, "WCS_CRUDE_USD": 90 };
-      return fallbacks[code] || 93;
+      return currentOilPrices[code] || 93;
     }
 
     async function getPastMonthPrices(code) {
@@ -96,6 +126,10 @@
       return num.toLocaleString('en-US');
     }
 
+    function formatUSD(num) {
+      return num.toFixed(2);
+    }
+
     // Create widget structure once
     function createWidgets() {
       const oils = [
@@ -110,7 +144,7 @@
       oils.forEach(oil => {
         const card = document.createElement("div");
         card.className = `bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${oil.color}-400 transition-all group relative cursor-help`;
-        card.title = `${oil.label} — SATS per barrel (updates every 5 min)`;
+        card.title = `BTC: $${btcPrice.toLocaleString()} | ${oil.label}: $${formatUSD(currentOilPrices[oil.code])} / bbl`; // initial
         card.innerHTML = `
           <div class="uppercase tracking-widest text-sm font-medium text-${oil.color}-400">${oil.label}</div>
           <div id="sats-${oil.code}" class="mt-6 price font-mono font-semibold text-white">0</div>
@@ -120,12 +154,12 @@
       });
     }
 
-    // Update only numbers (BTC fast, Oil every 5 min)
+    // Update numbers + tooltips
     async function updateWidgets() {
-      await getBTC();  // always fast for BTC
+      await getBTC();
 
       const now = Date.now();
-      const shouldUpdateOil = (now - lastOilUpdate) > 300000; // 5 minutes
+      const shouldUpdateOil = (now - lastOilUpdate) > 300000;
 
       const oils = [
         { code: "WTI_USD",       label: "WTI",    color: "emerald" },
@@ -134,18 +168,17 @@
       ];
 
       for (const oil of oils) {
-        let usdPrice;
-        if (shouldUpdateOil) {
-          usdPrice = await getCurrentOilPrice(oil.code);
-        } else {
-          // Reuse previous value if we have it stored, but for simplicity we re-fetch only when needed
-          usdPrice = await getCurrentOilPrice(oil.code); // still safe, but you can cache further if wanted
-        }
-
+        const usdPrice = shouldUpdateOil ? await getCurrentOilPrice(oil.code) : currentOilPrices[oil.code];
         const sats = satsPerBbl(usdPrice);
 
         const satsEl = document.getElementById(`sats-${oil.code}`);
         if (satsEl) satsEl.textContent = formatNumber(sats);
+
+        // Update tooltip with live BTC + oil price
+        const card = satsEl ? satsEl.closest('div[title]') : null;
+        if (card) {
+          card.title = `BTC: $${btcPrice.toLocaleString()} | ${oil.label}: $${formatUSD(usdPrice)} / bbl`;
+        }
       }
 
       if (shouldUpdateOil) lastOilUpdate = now;
@@ -160,7 +193,6 @@
         getPastMonthPrices("WCS_CRUDE_USD")
       ]);
 
-      // Safe label generation to prevent "Invalid Date"
       const labels = wtiHistory.length ? 
         wtiHistory.map(h => {
           const d = h.date;
@@ -215,7 +247,7 @@
     // Initial load
     init();
 
-    // BTC updates every 30 seconds
+    // BTC updates every 30 seconds (updates tooltips too)
     setInterval(() => {
       updateWidgets();
     }, 30000);
@@ -228,3 +260,4 @@
   </script>
 </body>
 </html>
+         
