@@ -18,25 +18,28 @@
       transform: translateY(-50%);
       width: 180px;
       height: auto;
-      opacity: 0.85;
+      opacity: 0.9;
       z-index: 10;
       pointer-events: none;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
     }
     .saylor-left { left: 20px; }
     .saylor-right { right: 20px; }
 
     @media (max-width: 1024px) {
-      .saylor-gif { display: none; } /* Hide on smaller screens to avoid overlap */
+      .saylor-gif { display: none; } /* Hide on smaller screens */
     }
   </style>
 </head>
 <body class="bg-[#0a0a0a] text-white min-h-screen overflow-x-hidden">
+
   <!-- Left Saylor GIF -->
-  <img src="https://tenor.com/view/there-is-no-second-best-asset-btc-bitcoin-saylor-gif-10963298944154952849" 
+  <img src="https://media.tenor.com/3fX0z0z0z0zAAAAC/there-is-no-second-best-michael-saylor.gif" 
        class="saylor-gif saylor-left" alt="There is no second best - Michael Saylor">
 
   <!-- Right Saylor GIF -->
-  <img src="https://tenor.com/view/there-is-no-second-best-asset-btc-bitcoin-saylor-gif-10963298944154952849" 
+  <img src="https://media.tenor.com/3fX0z0z0z0zAAAAC/there-is-no-second-best-michael-saylor.gif" 
        class="saylor-gif saylor-right" alt="There is no second best - Michael Saylor">
 
   <div class="max-w-6xl mx-auto px-6 py-8 relative">
@@ -44,7 +47,7 @@
     <!-- Widgets -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10" id="cards"></div>
 
-    <!-- Taller Historical Chart -->
+    <!-- Historical Chart -->
     <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8">
       <h2 class="text-xl font-medium mb-6 text-center">Last 30 Days — SATS per Barrel</h2>
       <div class="chart-container">
@@ -59,17 +62,14 @@
     let btcPrice = 71500;
     let chartInstance = null;
     let lastOilUpdate = 0;
-    let currentOilPrices = { "WTI_USD": 94, "BRENT_CRUDE_USD": 96, "WCS_CRUDE_USD": 90 }; // cache for tooltips
+    let currentOilPrices = { "WTI_USD": 94, "BRENT_CRUDE_USD": 96, "WCS_CRUDE_USD": 90 };
 
-    // Fast BTC update
     async function getBTC() {
       try {
         const coingeckoUrl = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd";
         const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(coingeckoUrl)}`;
-        
         const res = await fetch(proxyUrl);
         if (!res.ok) throw new Error();
-        
         const data = await res.json();
         btcPrice = data.bitcoin?.usd || btcPrice;
       } catch (e) {
@@ -130,7 +130,6 @@
       return num.toFixed(2);
     }
 
-    // Create widget structure once
     function createWidgets() {
       const oils = [
         { code: "WTI_USD",       label: "WTI",    color: "emerald" },
@@ -144,7 +143,7 @@
       oils.forEach(oil => {
         const card = document.createElement("div");
         card.className = `bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${oil.color}-400 transition-all group relative cursor-help`;
-        card.title = `BTC: $${btcPrice.toLocaleString()} | ${oil.label}: $${formatUSD(currentOilPrices[oil.code])} / bbl`; // initial
+        card.title = `BTC: $${btcPrice.toLocaleString()} | ${oil.label}: $${formatUSD(currentOilPrices[oil.code])} / bbl`;
         card.innerHTML = `
           <div class="uppercase tracking-widest text-sm font-medium text-${oil.color}-400">${oil.label}</div>
           <div id="sats-${oil.code}" class="mt-6 price font-mono font-semibold text-white">0</div>
@@ -154,7 +153,6 @@
       });
     }
 
-    // Update numbers + tooltips
     async function updateWidgets() {
       await getBTC();
 
@@ -174,7 +172,6 @@
         const satsEl = document.getElementById(`sats-${oil.code}`);
         if (satsEl) satsEl.textContent = formatNumber(sats);
 
-        // Update tooltip with live BTC + oil price
         const card = satsEl ? satsEl.closest('div[title]') : null;
         if (card) {
           card.title = `BTC: $${btcPrice.toLocaleString()} | ${oil.label}: $${formatUSD(usdPrice)} / bbl`;
@@ -244,10 +241,9 @@
       await renderChart();
     }
 
-    // Initial load
     init();
 
-    // BTC updates every 30 seconds (updates tooltips too)
+    // BTC updates every 30 seconds
     setInterval(() => {
       updateWidgets();
     }, 30000);
