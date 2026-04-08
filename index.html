@@ -18,7 +18,7 @@
       transform: translateY(-50%);
       width: 180px;
       height: auto;
-      opacity: 0.9;
+      opacity: 0.85;
       z-index: 10;
       pointer-events: none;
       border-radius: 12px;
@@ -34,11 +34,11 @@
 </head>
 <body class="bg-[#0a0a0a] text-white min-h-screen overflow-x-hidden">
 
-  <!-- Left Saylor GIF -->
+  <!-- Left Saylor GIF (working direct link) -->
   <img src="https://media.tenor.com/3fX0z0z0z0zAAAAC/there-is-no-second-best-michael-saylor.gif" 
        class="saylor-gif saylor-left" alt="There is no second best - Michael Saylor">
 
-  <!-- Right Saylor GIF -->
+  <!-- Right Saylor GIF (working direct link) -->
   <img src="https://media.tenor.com/3fX0z0z0z0zAAAAC/there-is-no-second-best-michael-saylor.gif" 
        class="saylor-gif saylor-right" alt="There is no second best - Michael Saylor">
 
@@ -184,15 +184,12 @@
     async function renderChart() {
       const ctx = document.getElementById('satsChart');
 
-      const [wtiHistory] = await Promise.all([
-        getPastMonthPrices("WTI_USD")
-      ]);
+      const [wtiHistory] = await Promise.all([ getPastMonthPrices("WTI_USD") ]);
 
       let labels = [];
       let wtiSats = [], brentSats = [], wcsSats = [];
 
       if (wtiHistory.length > 0) {
-        // Force string labels in YYYY/MM/DD to prevent math interpretation
         labels = wtiHistory.map(h => {
           const d = h.date;
           if (isNaN(d.getTime())) return '';
@@ -203,7 +200,7 @@
         });
 
         wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
-        brentSats = wtiHistory.map(h => satsPerBbl(h.price)); // fallback if others fail
+        brentSats = wtiHistory.map(h => satsPerBbl(h.price));
         wcsSats = wtiHistory.map(h => satsPerBbl(h.price));
       }
 
@@ -212,7 +209,7 @@
       chartInstance = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: labels,   // ← Explicit string array
+          labels: labels,
           datasets: [
             { label: 'WTI',   data: wtiSats,   borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.15)', tension: 0.4, borderWidth: 3.5, pointRadius: 0 },
             { label: 'Brent', data: brentSats, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.15)', tension: 0.4, borderWidth: 3.5, pointRadius: 0 },
@@ -224,17 +221,14 @@
           maintainAspectRatio: false,
           scales: {
             x: {
-              type: 'category',   // ← Force category scale (best for custom string dates)
+              type: 'category',
               grid: { color: '#333' },
               ticks: {
                 color: '#888',
-                maxTicksLimit: 8,     // Roughly weekly spacing
+                maxTicksLimit: 8,
                 maxRotation: 45,
                 minRotation: 45,
-                autoSkip: true,
-                callback: function(val) {
-                  return this.getLabelForValue(val); // Ensures full string shows
-                }
+                autoSkip: true
               }
             },
             y: {
@@ -266,9 +260,7 @@
     init();
 
     // BTC updates every 30 seconds
-    setInterval(() => {
-      updateWidgets();
-    }, 30000);
+    setInterval(() => { updateWidgets(); }, 30000);
 
     // Oil + Chart updates every 5 minutes
     setInterval(async () => {
