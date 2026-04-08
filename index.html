@@ -31,26 +31,40 @@
 
   <script>
     const OIL_API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a";
-    let btcPrice = 71500;
+    let btcPrice = 71325;   // Updated starting value closer to reality
+
     let chartInstance = null;
     let lastOilUpdate = 0;
 
-    // Cache previous values
     let previousValues = {
       "WTI_USD": 94,
       "NATURAL_GAS_USD": 3.5
     };
 
+    // Improved BTC fetch with better fallback and retry
     async function getBTC() {
       try {
-        const coingeckoUrl = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd";
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(coingeckoUrl)}`;
-        const res = await fetch(proxyUrl);
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        btcPrice = data.bitcoin?.usd || btcPrice;
+        // Try a more reliable direct approach first
+        let res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", {
+          headers: { "Accept": "application/json" }
+        });
+
+        if (!res.ok) {
+          // Fallback to proxy if direct fails
+          const coingeckoUrl = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd";
+          const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(coingeckoUrl)}`;
+          res = await fetch(proxyUrl);
+        }
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.bitcoin && data.bitcoin.usd) {
+            btcPrice = data.bitcoin.usd;
+            return;
+          }
+        }
       } catch (e) {
-        console.warn("BTC fetch failed");
+        console.warn("BTC fetch failed, keeping last known price:", btcPrice);
       }
     }
 
@@ -133,7 +147,7 @@
     }
 
     async function updateWidgets() {
-      await getBTC();
+      await getBTC();   // Always try to get fresh BTC
 
       const now = Date.now();
       const shouldUpdateOil = (now - lastOilUpdate) > 300000;
@@ -150,7 +164,7 @@
         const satsEl = document.getElementById(`sats-${item.code}`);
         if (satsEl) satsEl.textContent = formatNumber(sats);
 
-        // Update tooltip with latest prices
+        // Update tooltip
         const card = satsEl ? satsEl.closest('div[title]') : null;
         if (card) {
           const unit = item.code.includes("GAS") ? "mmbtu" : "bbl";
@@ -161,6 +175,7 @@
       if (shouldUpdateOil) lastOilUpdate = now;
     }
 
+    // renderChart function remains the same as your last version (with DD on X-axis and 2 Y-axes)
     async function renderChart() {
       const ctx = document.getElementById('satsChart');
 
@@ -217,12 +232,7 @@
             x: {
               type: 'category',
               grid: { color: '#333' },
-              ticks: {
-                color: '#888',
-                maxTicksLimit: 8,
-                maxRotation: 0,
-                minRotation: 0
-              }
+              ticks: { color: '#888', maxTicksLimit: 8, maxRotation: 0, minRotation: 0 }
             },
             y: {
               type: 'linear',
