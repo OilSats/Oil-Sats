@@ -196,7 +196,12 @@
       if (wtiHistory.length > 0) {
         labels = wtiHistory.map(h => {
           const d = h.date;
-          return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          if (isNaN(d.getTime())) return '';
+          // YYYY/MM/DD format
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${year}/${month}/${day}`;
         });
 
         wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
@@ -240,10 +245,11 @@
               grid: { color: '#333' }, 
               ticks: { 
                 color: '#888', 
-                maxTicksLimit: 6,           // ~ weekly for 30 days
-                maxRotation: 0,
-                minRotation: 0,
-                callback: function(value, index) {
+                maxTicksLimit: 6,        // ~ one per week over 30 days
+                maxRotation: 45,
+                minRotation: 45,
+                autoSkip: true,
+                callback: function(value) {
                   return this.getLabelForValue(value);
                 }
               }
