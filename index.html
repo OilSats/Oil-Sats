@@ -15,40 +15,40 @@
     <!-- Header -->
     <div class="flex justify-between items-center mb-12 border-b border-gray-800 pb-6">
       <div class="flex items-center gap-4">
-        <!-- Stable Oil Drum + Bitcoin Logo -->
+        <!-- Stable Logo -->
         <img 
-          src="https://i.ibb.co.com/0jK7vL2/oil-sats-logo.png" 
+          src="https://i.ibb.co/0jK7vL2/oil-sats-logo.png" 
           alt="Oil Sats Logo" 
           class="w-16 h-16 object-contain"
-          onerror="this.src='https://via.placeholder.com/64x64/amber/000?text=OS'; console.log('Logo fallback used');"
+          onerror="this.src='https://via.placeholder.com/64/amber/111?text=OS';"
         >
         <h1 class="text-3xl font-semibold tracking-tight">Oil Sats</h1>
       </div>
-      <div class="flex items-center gap-6 text-sm">
-        <button onclick="refreshAll()" class="flex items-center gap-2 hover:text-amber-400 transition-colors">
-          <i class="fa-solid fa-rotate"></i> Refresh
-        </button>
-      </div>
+      <button onclick="refreshAll()" class="flex items-center gap-2 hover:text-amber-400 transition-colors text-sm">
+        <i class="fa-solid fa-rotate"></i> Refresh
+      </button>
     </div>
 
-    <!-- Price Widgets -->
+    <!-- Price Cards -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="cards"></div>
 
     <div class="text-center text-xs text-gray-500 mt-12">
-      WTI • Brent • WCS priced in Sats per barrel • Updates every 60s
+      WTI • Brent • WCS in Sats per barrel • Live updates
     </div>
   </div>
 
   <script>
-    const API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a";
+    const OIL_API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a";
 
-    let btcPrice = 71450; // safe fallback
+    let btcPrice = 71500; // fallback
 
     async function getBTC() {
       try {
-        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
-        const data = await res.json();
-        btcPrice = data.bitcoin?.usd || 71450;
+        // Use a CORS-friendly proxy for CoinGecko
+        const res = await fetch("https://api.allorigins.win/get?url=" + encodeURIComponent("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"));
+        const proxyData = await res.json();
+        const data = JSON.parse(proxyData.contents);
+        btcPrice = data.bitcoin?.usd || 71500;
       } catch(e) {
         console.error("BTC fetch failed - using fallback");
       }
@@ -56,22 +56,25 @@
 
     async function getOilPrice(code) {
       try {
-        const url = `https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}_USD&api_key=${API_KEY}`;
-        const res = await fetch(url);
+        const res = await fetch(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}_USD`, {
+          headers: {
+            "Authorization": `Token ${OIL_API_KEY}`
+          }
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
         const json = await res.json();
-        
         if (json.data && json.data.price) {
-          console.log(`${code} price fetched: $${json.data.price}`);
           return { price: parseFloat(json.data.price) };
         }
-        
-        throw new Error("Invalid response structure");
       } catch(e) {
-        console.error(`Oil API failed for ${code} - using fallback`);
-        // Realistic fallbacks (updated April 2026 levels)
-        const fallbacks = { WTI: 94.5, BRENT: 94.0, WCS: 89.0 };
-        return { price: fallbacks[code.toUpperCase()] || 92 };
+        console.error(`Oil API error for ${code}`);
       }
+
+      // Realistic fallbacks (April 2026 approx prices)
+      const fallbacks = { WTI: 94, BRENT: 96, WCS: 90 };
+      return { price: fallbacks[code.toUpperCase()] || 93 };
     }
 
     function satsPerBbl(oilUsd) {
@@ -84,7 +87,7 @@
 
     async function renderCards() {
       await getBTC();
-      
+
       const oils = [
         { code: "WTI", label: "WTI", color: "emerald" },
         { code: "BRENT", label: "Brent", color: "blue" },
@@ -96,19 +99,15 @@
 
       for (const oil of oils) {
         const oilData = await getOilPrice(oil.code);
-        const usdPrice = oilData.price;
-        const sats = satsPerBbl(usdPrice);
+        const sats = satsPerBbl(oilData.price);
 
         const cardHTML = `
           <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${oil.color}-400 transition-all">
-            <div>
-              <div class="uppercase tracking-widest text-sm font-medium text-${oil.color}-400">${oil.label}</div>
-              <div class="mt-6 price font-mono font-semibold text-white">${formatNumber(sats)}</div>
-              <div class="text-xs text-gray-400 mt-1">SATS / bbl</div>
-            </div>
-            <div class="mt-8 text-xs text-gray-500 flex justify-between">
-              <span>Live • Auto-refreshes</span>
-              <span class="font-mono">${btcPrice.toLocaleString()} USD/BTC</span>
+            <div class="uppercase tracking-widest text-sm font-medium text-${oil.color}-400">${oil.label}</div>
+            <div class="mt-6 price font-mono font-semibold text-white">${formatNumber(sats)}</div>
+            <div class="text-xs text-gray-400 mt-1">SATS / bbl</div>
+            <div class="mt-8 text-xs text-gray-500">
+              Live • Refreshes automatically
             </div>
           </div>`;
         container.innerHTML += cardHTML;
@@ -119,7 +118,7 @@
       await renderCards();
     }
 
-    // Initial load + auto refresh
+    // Initial load + auto refresh every 60 seconds
     renderCards();
     setInterval(renderCards, 60000);
   </script>
