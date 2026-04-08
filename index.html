@@ -15,13 +15,8 @@
       font-family: monospace;
     }
 
-    @media (max-width: 640px) {
-      .widget-value { font-size: 2.1rem; }
-    }
-
-    @media (min-width: 641px) and (max-width: 1024px) {
-      .widget-value { font-size: 2.4rem; }
-    }
+    @media (max-width: 640px) { .widget-value { font-size: 2.1rem; } }
+    @media (min-width: 641px) and (max-width: 1024px) { .widget-value { font-size: 2.4rem; } }
 
     .widget-card {
       position: relative;
@@ -128,7 +123,13 @@
       return btcPrice > 0 ? Math.round((oilUsd / btcPrice) * 100000000) : 0;
     }
 
+    // Raw gas value in SATS per GJ (selling AECO gas)
     function satsPerGJ_AECO(aecoCadPerGJ) {
+      return btcPrice > 0 ? Math.round((aecoCadPerGJ / btcPrice) * 100000000) : 0;
+    }
+
+    // Mining revenue in SATS per GJ (using own gas)
+    function satsPerGJ_Mining() {
       const dailyKwh = M70S_POWER_KW * 24;
       const kwhPerGJ = 293.071 / 1.05506;   // ≈ 277.8 kWh per GJ
       const gjPerDay = dailyKwh / kwhPerGJ;
@@ -137,9 +138,9 @@
     }
 
     function miningPremium(aecoCadPerGJ) {
-      const ownGasSats = satsPerGJ_AECO(aecoCadPerGJ);
-      const gasSats = satsPerBbl(aecoCadPerGJ);
-      return gasSats > 0 ? (ownGasSats / gasSats).toFixed(1) : "0";
+      const miningSats = satsPerGJ_Mining();
+      const gasSats = satsPerGJ_AECO(aecoCadPerGJ);
+      return gasSats > 0 ? (miningSats / gasSats).toFixed(1) : "0";
     }
 
     function getSetupMetrics() {
@@ -147,7 +148,7 @@
       const m3PerGJ = 0.0353;
       const gjPerDay = m3PerDay * m3PerGJ;
 
-      const satsPerGJ = satsPerGJ_AECO(previousValues["AECO_CAD"]);
+      const satsPerGJ = satsPerGJ_Mining();
       const totalDailySatsNow = Math.round(satsPerGJ * gjPerDay);
       const totalDailySatsPostHalving = Math.round((satsPerGJ / 2) * gjPerDay);
 
@@ -156,7 +157,7 @@
       const totalInvestmentCAD = baseCapexCAD + soundMitigationCAD;
 
       const dailyRevenueUSD = (totalDailySatsNow / 100000000) * btcPrice;
-      const paybackDays = Math.round(totalInvestmentCAD / (dailyRevenueUSD * 1.39)); // approx USD→CAD
+      const paybackDays = Math.round(totalInvestmentCAD / (dailyRevenueUSD * 1.39));
       const paybackMonths = (paybackDays / 30).toFixed(1);
 
       return {
@@ -189,7 +190,7 @@
           color: "emerald", 
           value: formatNumber(satsPerBbl(wtiPrice)), 
           unit: "SATS / bbl",
-          tooltip: `WTI Price: $${wtiPrice.toFixed(2)} USD per barrel`
+          tooltip: `WTI: $${wtiPrice.toFixed(2)} / bbl<br>BTC: $${btcPrice.toLocaleString()} / BTC`
         },
         { 
           code: "AECO_CAD", 
@@ -203,9 +204,9 @@
           code: "M70S_OWN", 
           label: "M70S+ Mining Revenue", 
           color: "sky", 
-          value: formatNumber(satsPerGJ_AECO(aecoPrice)), 
+          value: formatNumber(satsPerGJ_Mining()), 
           unit: "SATS / GJ",
-          tooltip: "Revenue per GJ of own stranded Alberta gas (zero marginal cost)"
+          tooltip: "Mining revenue per GJ of own stranded Alberta gas (zero marginal gas cost)"
         },
         { 
           code: "PREMIUM", 
@@ -299,7 +300,7 @@
       const updates = {
         "WTI_USD": formatNumber(satsPerBbl(wtiPrice)),
         "AECO_CAD": formatNumber(satsPerGJ_AECO(aecoPrice)),
-        "M70S_OWN": formatNumber(satsPerGJ_AECO(aecoPrice)),
+        "M70S_OWN": formatNumber(satsPerGJ_Mining()),
         "PREMIUM": miningPremium(aecoPrice),
         "DAILY_SATS": formatNumber(metrics.totalDailySatsNow),
         "DAILY_SATS_HALVING": formatNumber(metrics.totalDailySatsPostHalving),
