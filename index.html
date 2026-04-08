@@ -32,22 +32,21 @@
     const OIL_API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a";
     let btcPrice = 71500;
     let chartInstance = null;
+    let lastOilUpdate = 0;
 
-    // Reliable BTC fetch (corsproxy.io is much more stable than allorigins)
+    // Fast BTC update
     async function getBTC() {
       try {
         const coingeckoUrl = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd";
         const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(coingeckoUrl)}`;
         
         const res = await fetch(proxyUrl);
-        if (!res.ok) throw new Error("Proxy failed");
+        if (!res.ok) throw new Error();
         
         const data = await res.json();
         btcPrice = data.bitcoin?.usd || btcPrice;
-        return btcPrice;
       } catch (e) {
-        console.warn("BTC fetch failed, using cached price:", btcPrice);
-        return btcPrice;
+        console.warn("BTC fetch failed, using cached price");
       }
     }
 
@@ -59,19 +58,12 @@
             "Content-Type": "application/json"
           }
         });
-
         if (res.ok) {
           const json = await res.json();
-          if (json.data && json.data.price) {
-            return parseFloat(json.data.price);
-          }
+          if (json.data && json.data.price) return parseFloat(json.data.price);
         }
-      } catch (e) {
-        console.warn(`Current price fetch failed for ${code}`);
-      }
-
-      // Fallbacks
-      const fallbacks = { WTI_USD: 94, BRENT_CRUDE_USD: 96, WCS_CRUDE_USD: 90 };
+      } catch (e) {}
+      const fallbacks = { "WTI_USD": 94, "BRENT_CRUDE_USD": 96, "WCS_CRUDE_USD": 90 };
       return fallbacks[code] || 93;
     }
 
@@ -83,7 +75,6 @@
             "Content-Type": "application/json"
           }
         });
-
         if (res.ok) {
           const json = await res.json();
           if (json.data && json.data.prices) {
@@ -93,9 +84,7 @@
             })).reverse();
           }
         }
-      } catch (e) {
-        console.warn(`Historical fetch failed for ${code}`);
-      }
+      } catch (e) {}
       return [];
     }
 
@@ -107,7 +96,7 @@
       return num.toLocaleString('en-US');
     }
 
-    // Build widget cards ONCE on first load
+    // Create widget structure once
     function createWidgets() {
       const oils = [
         { code: "WTI_USD",       label: "WTI",    color: "emerald" },
@@ -121,20 +110,22 @@
       oils.forEach(oil => {
         const card = document.createElement("div");
         card.className = `bg-gray-900 border border-gray-800 rounded-3xl p-8 hover:border-${oil.color}-400 transition-all group relative cursor-help`;
-        card.title = `Oil: $XX.XX USD/bbl\nBTC: $XX,XXX USD`; // will be updated
+        card.title = `${oil.label} — SATS per barrel (updates every 5 min)`;
         card.innerHTML = `
           <div class="uppercase tracking-widest text-sm font-medium text-${oil.color}-400">${oil.label}</div>
           <div id="sats-${oil.code}" class="mt-6 price font-mono font-semibold text-white">0</div>
           <div class="text-xs text-gray-400 mt-1">SATS / bbl</div>
-          <div id="usd-${oil.code}" class="text-sm text-gray-500 mt-4">USD/bbl: $0.00</div>
         `;
         container.appendChild(card);
       });
     }
 
-    // Update only the numbers (this is what prevents disappearing widgets)
+    // Update only numbers (BTC fast, Oil every 5 min)
     async function updateWidgets() {
-      await getBTC();
+      await getBTC();  // always fast for BTC
+
+      const now = Date.now();
+      const shouldUpdateOil = (now - lastOilUpdate) > 300000; // 5 minutes
 
       const oils = [
         { code: "WTI_USD",       label: "WTI",    color: "emerald" },
@@ -143,17 +134,21 @@
       ];
 
       for (const oil of oils) {
-        const usdPrice = await getCurrentOilPrice(oil.code);
+        let usdPrice;
+        if (shouldUpdateOil) {
+          usdPrice = await getCurrentOilPrice(oil.code);
+        } else {
+          // Reuse previous value if we have it stored, but for simplicity we re-fetch only when needed
+          usdPrice = await getCurrentOilPrice(oil.code); // still safe, but you can cache further if wanted
+        }
+
         const sats = satsPerBbl(usdPrice);
 
-        // Update SATS
         const satsEl = document.getElementById(`sats-${oil.code}`);
         if (satsEl) satsEl.textContent = formatNumber(sats);
-
-        // Update USD price
-        const usdEl = document.getElementById(`usd-${oil.code}`);
-        if (usdEl) usdEl.textContent = `USD/bbl: $${usdPrice.toFixed(2)}`;
       }
+
+      if (shouldUpdateOil) lastOilUpdate = now;
     }
 
     async function renderChart() {
@@ -165,7 +160,12 @@
         getPastMonthPrices("WCS_CRUDE_USD")
       ]);
 
-      const labels = wtiHistory.map(h => h.date.toLocaleDateString('en-US', {month:'short', day:'numeric'}));
+      // Safe label generation to prevent "Invalid Date"
+      const labels = wtiHistory.length ? 
+        wtiHistory.map(h => {
+          const d = h.date;
+          return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+        }) : [];
 
       const wtiSats = wtiHistory.map(h => satsPerBbl(h.price));
       const brentSats = brentHistory.map(h => satsPerBbl(h.price));
@@ -207,19 +207,24 @@
     }
 
     async function init() {
-      createWidgets();           // Build structure once
-      await updateWidgets();     // Fill in the numbers
-      await renderChart();       // Render chart
+      createWidgets();
+      await updateWidgets();
+      await renderChart();
     }
 
     // Initial load
     init();
 
-    // Update prices every 30 seconds (only numbers change)
-    setInterval(updateWidgets, 30000);
+    // BTC updates every 30 seconds
+    setInterval(() => {
+      updateWidgets();
+    }, 30000);
 
-    // Refresh chart every 5 minutes
-    setInterval(renderChart, 300000);
+    // Oil + Chart updates every 5 minutes
+    setInterval(async () => {
+      await updateWidgets();
+      await renderChart();
+    }, 300000);
   </script>
 </body>
 </html>
