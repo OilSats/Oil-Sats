@@ -44,9 +44,15 @@
       opacity: 1;
     }
 
-    /* Orange for all SATS units */
+    /* Orange for SATS units */
     .sats-unit {
       color: #f97316;
+      font-weight: 500;
+    }
+
+    /* Light red for CAD units */
+    .cad-unit {
+      color: #f87171;
       font-weight: 500;
     }
   </style>
@@ -178,9 +184,9 @@
           unit: `<span class="sats-unit">SATS/day (Bear / Base / Bull)</span>`, 
           tooltip: "Daily sats using 20 e³m³/d • After 2028 halving" },
 
-        { code: "INVESTMENT", label: "Base Investment", color: "rose", value: formatCAD(16500000), unit: "CAD", tooltip: "ASICs + generators + infrastructure" },
-        { code: "SOUND", label: "Sound Mitigation", color: "orange", value: formatCAD(3850000), unit: "CAD", tooltip: "To ~40 dBA" },
-        { code: "TOTAL_INVEST", label: "Total Investment", color: "red", value: formatCAD(TOTAL_INVEST_CAD), unit: "CAD", tooltip: "Full project cost" },
+        { code: "INVESTMENT", label: "Base Investment", color: "rose", value: formatCAD(16500000), unit: `<span class="cad-unit">CAD</span>`, tooltip: "ASICs + generators + infrastructure" },
+        { code: "SOUND", label: "Sound Mitigation", color: "orange", value: formatCAD(3850000), unit: `<span class="cad-unit">CAD</span>`, tooltip: "To ~40 dBA" },
+        { code: "TOTAL_INVEST", label: "Total Investment", color: "red", value: formatCAD(TOTAL_INVEST_CAD), unit: `<span class="cad-unit">CAD</span>`, tooltip: "Full project cost" },
 
         { code: "PAYBACK", label: "Payback Period", color: "lime", 
           value: `${bearNow.paybackMonths} / ${baseNow.paybackMonths} / ${bullNow.paybackMonths}`, 
@@ -198,7 +204,7 @@
         card.innerHTML = `
           <div class="uppercase tracking-widest text-xs sm:text-sm font-medium text-${item.color}-400">${item.label}</div>
           <div id="val-${item.code}" class="widget-value mt-4 sm:mt-6">${item.value}</div>
-          <div class="text-xs sats-unit mt-2" id="unit-${item.code}">${item.unit}</div>
+          <div class="text-xs mt-2" id="unit-${item.code}">${item.unit}</div>
           <div class="tooltip">${item.tooltip}</div>
         `;
         container.appendChild(card);
