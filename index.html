@@ -3,20 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Oil Sats - AECO + M70S+</title>
+  <title>Oil Sats - AECO + M70S+ (Live)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: 'Inter', system_ui, sans-serif; }
-
-    .widget-value {
-      font-size: 2.65rem;
-      line-height: 1.05;
-      font-weight: 600;
-      font-family: monospace;
-    }
-
+    .widget-value { font-size: 2.65rem; line-height: 1.05; font-weight: 600; font-family: monospace; }
     @media (max-width: 640px) { .widget-value { font-size: 2.05rem; } }
-    @media (min-width: 641px) and (max-width: 1024px) { .widget-value { font-size: 2.35rem; } }
 
     .widget-card { position: relative; }
     .widget-card .tooltip {
@@ -51,15 +43,17 @@
 <body class="bg-[#0a0a0a] text-white min-h-screen">
 
   <div class="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-    <div class="text-center text-gray-500 text-xs mb-6">
-      Version 2026-04-09 • Live Prices with Safe Fallbacks
+    <div class="text-center text-gray-500 text-xs mb-2">
+      Version 2026-04-09 • Live Prices
+    </div>
+    <div id="last-updated" class="text-center text-gray-500 text-xs mb-6">
+      Last updated: never
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-6" id="cards"></div>
   </div>
 
   <script>
-    // Safe fallback values
     let btcPrice = 71325;
     let wtiPrice = 94;
     let aecoPrice = 2.80;
@@ -77,14 +71,21 @@
     }
 
     async function fetchLivePrices() {
+      console.log("Fetching live prices...");
+
       // BTC
       try {
         const res = await fetch(getProxiedUrl("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"));
         if (res.ok) {
           const data = await res.json();
-          if (data.bitcoin?.usd) btcPrice = Math.round(data.bitcoin.usd);
+          if (data.bitcoin?.usd) {
+            btcPrice = Math.round(data.bitcoin.usd);
+            console.log("BTC updated to:", btcPrice);
+          }
         }
-      } catch (e) { console.log("BTC fetch failed"); }
+      } catch (e) {
+        console.log("BTC fetch failed");
+      }
 
       // WTI
       try {
@@ -95,7 +96,9 @@
           const data = await res.json();
           if (data.data?.price) wtiPrice = parseFloat(data.data.price);
         }
-      } catch (e) { console.log("WTI fetch failed"); }
+      } catch (e) {
+        console.log("WTI fetch failed");
+      }
 
       // AECO
       try {
@@ -108,11 +111,16 @@
             const data = await res.json();
             if (data.data?.price) {
               aecoPrice = parseFloat(data.data.price);
+              console.log("AECO updated to:", aecoPrice);
               break;
             }
           }
         }
-      } catch (e) { console.log("AECO fetch failed"); }
+      } catch (e) {
+        console.log("AECO fetch failed");
+      }
+
+      document.getElementById("last-updated").textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
     }
 
     function dailySatsMinedPerUnit(scenario, isPostHalving = false) {
@@ -152,83 +160,64 @@
     function formatCAD(num) { return 'C$' + num.toLocaleString('en-US'); }
 
     function createWidgets() {
-      try {
-        const bearNow = getSetupMetrics("bear", false);
-        const baseNow = getSetupMetrics("base", false);
-        const bullNow = getSetupMetrics("bull", false);
+      const bearNow = getSetupMetrics("bear", false);
+      const baseNow = getSetupMetrics("base", false);
+      const bullNow = getSetupMetrics("bull", false);
 
-        const bearPost = getSetupMetrics("bear", true);
-        const basePost = getSetupMetrics("base", true);
-        const bullPost = getSetupMetrics("bull", true);
+      const bearPost = getSetupMetrics("bear", true);
+      const basePost = getSetupMetrics("base", true);
+      const bullPost = getSetupMetrics("bull", true);
 
-        const premium = (satsPerGJ_Mining("base") / satsPerGJ_AECO()).toFixed(1) || "—";
+      const premium = (satsPerGJ_Mining("base") / satsPerGJ_AECO()).toFixed(1) || "—";
 
-        // Space calculation
-        const totalGJperDay = GAS_VOLUME_M3_PER_DAY * 0.0353;
-        const minersNeeded = Math.round(totalGJperDay / (M70S_POWER_KW * 24 / 277.8));
-        const containers = Math.ceil(minersNeeded / 260);
-        const spaceM2 = Math.round(containers * 110);
-        const spaceAcres = (spaceM2 / 4046.86).toFixed(1);
+      const items = [
+        { code: "WTI", label: "WTI", color: "emerald", value: formatNumber(Math.round((wtiPrice / btcPrice) * 1e8)), unit: "SATS / bbl", tooltip: `WTI: $${wtiPrice.toFixed(2)} / bbl\nBTC: $${btcPrice.toLocaleString()} / BTC` },
+        { code: "AECO", label: "AECO Alberta", color: "amber", value: formatNumber(satsPerGJ_AECO()), unit: "SATS / GJ", tooltip: `AECO: C$${aecoPrice.toFixed(2)} / GJ` },
+        { code: "MINING", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_Mining("base")), unit: "SATS / GJ", tooltip: "Mining revenue per GJ using own gas" },
+        { code: "PREMIUM", label: "Mining Premium", color: "violet", value: premium, unit: "×", tooltip: "Mining vs selling raw AECO gas" },
 
-        const items = [
-          { code: "WTI", label: "WTI", color: "emerald", value: formatNumber(Math.round((wtiPrice / btcPrice) * 1e8)), unit: "SATS / bbl", tooltip: `WTI: $${wtiPrice.toFixed(2)} / bbl\nBTC: $${btcPrice.toLocaleString()} / BTC` },
-          { code: "AECO", label: "AECO Alberta", color: "amber", value: formatNumber(satsPerGJ_AECO()), unit: "SATS / GJ", tooltip: `AECO: C$${aecoPrice.toFixed(2)} / GJ` },
-          { code: "MINING", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_Mining("base")), unit: "SATS / GJ", tooltip: "Mining revenue per GJ using own gas" },
-          { code: "PREMIUM", label: "Mining Premium", color: "violet", value: premium, unit: "×", tooltip: "Mining vs selling raw AECO gas" },
+        { code: "DAILY_NOW", label: "Daily Sats (Now)", color: "cyan", 
+          value: `${formatNumber(bearNow.totalDailySats)}   ${formatNumber(baseNow.totalDailySats)}   ${formatNumber(bullNow.totalDailySats)}`, 
+          unit: `<span class="sats-unit">SATS/day (Bear / Base / Bull)</span>`, 
+          tooltip: "Daily sats using 20 e³m³/d • Pre-halving" },
 
-          { code: "DAILY_NOW", label: "Daily Sats (Now)", color: "cyan", 
-            value: `${formatNumber(bearNow.totalDailySats)}   ${formatNumber(baseNow.totalDailySats)}   ${formatNumber(bullNow.totalDailySats)}`, 
-            unit: `<span class="sats-unit">SATS/day (Bear / Base / Bull)</span>`, 
-            tooltip: "Daily sats using 20 e³m³/d • Pre-halving" },
+        { code: "DAILY_POST", label: "Daily Sats (Post 2028)", color: "purple", 
+          value: `${formatNumber(bearPost.totalDailySats)}   ${formatNumber(basePost.totalDailySats)}   ${formatNumber(bullPost.totalDailySats)}`, 
+          unit: `<span class="sats-unit">SATS/day (Bear / Base / Bull)</span>`, 
+          tooltip: "Daily sats using 20 e³m³/d • After 2028 halving" },
 
-          { code: "DAILY_POST", label: "Daily Sats (Post 2028)", color: "purple", 
-            value: `${formatNumber(bearPost.totalDailySats)}   ${formatNumber(basePost.totalDailySats)}   ${formatNumber(bullPost.totalDailySats)}`, 
-            unit: `<span class="sats-unit">SATS/day (Bear / Base / Bull)</span>`, 
-            tooltip: "Daily sats using 20 e³m³/d • After 2028 halving" },
+        { code: "INVESTMENT", label: "Base Investment", color: "rose", value: formatCAD(16500000), unit: `<span class="cad-unit">CAD</span>`, tooltip: "ASICs + generators + infrastructure" },
+        { code: "SOUND", label: "Sound Mitigation", color: "rose", value: formatCAD(3850000), unit: `<span class="cad-unit">CAD</span>`, tooltip: "To ~40 dBA" },
+        { code: "TOTAL_INVEST", label: "Total Investment", color: "rose", value: formatCAD(TOTAL_INVEST_CAD), unit: `<span class="cad-unit">CAD</span>`, tooltip: "Full project cost" },
 
-          { code: "INVESTMENT", label: "Base Investment", color: "rose", value: formatCAD(16500000), unit: `<span class="cad-unit">CAD</span>`, tooltip: "ASICs + generators + infrastructure" },
-          { code: "SOUND", label: "Sound Mitigation", color: "rose", value: formatCAD(3850000), unit: `<span class="cad-unit">CAD</span>`, tooltip: "To ~40 dBA" },
-          { code: "TOTAL_INVEST", label: "Total Investment", color: "rose", value: formatCAD(TOTAL_INVEST_CAD), unit: `<span class="cad-unit">CAD</span>`, tooltip: "Full project cost" },
+        { code: "PAYBACK", label: "Payback Period", color: "lime", 
+          value: `${bearNow.paybackMonths} / ${baseNow.paybackMonths} / ${bullNow.paybackMonths}`, 
+          unit: "Bear / Base / Bull (months)", 
+          tooltip: `Time to recover C$${TOTAL_INVEST_CAD.toLocaleString()} at $${btcPrice.toLocaleString()} USD/BTC` }
+      ];
 
-          { code: "SPACE", label: "Space Required", color: "teal", 
-            value: `${containers} × 40ft`, 
-            unit: `<span class="cad-unit">${spaceM2} m² (${spaceAcres} acres)</span>`, 
-            tooltip: `Space for ~${minersNeeded} M70S+ miners` },
+      const container = document.getElementById("cards");
+      container.innerHTML = "";
 
-          { code: "PAYBACK", label: "Payback Period", color: "lime", 
-            value: `${bearNow.paybackMonths} / ${baseNow.paybackMonths} / ${bullNow.paybackMonths}`, 
-            unit: "Bear / Base / Bull (months)", 
-            tooltip: `Time to recover C$${TOTAL_INVEST_CAD.toLocaleString()} at $${btcPrice.toLocaleString()} USD/BTC` }
-        ];
+      items.forEach(item => {
+        const card = document.createElement("div");
+        card.className = `widget-card bg-gray-900 border border-gray-800 rounded-3xl p-6 sm:p-8 hover:border-${item.color}-400 transition-all active:scale-[0.985]`;
 
-        const container = document.getElementById("cards");
-        container.innerHTML = "";
-
-        items.forEach(item => {
-          const card = document.createElement("div");
-          card.className = `widget-card bg-gray-900 border border-gray-800 rounded-3xl p-6 sm:p-8 hover:border-${item.color}-400 transition-all active:scale-[0.985]`;
-
-          card.innerHTML = `
-            <div class="uppercase tracking-widest text-xs sm:text-sm font-medium text-${item.color}-400">${item.label}</div>
-            <div id="val-${item.code}" class="widget-value mt-4 sm:mt-6">${item.value}</div>
-            <div class="text-xs mt-2" id="unit-${item.code}">${item.unit}</div>
-            <div class="tooltip">${item.tooltip}</div>
-          `;
-          container.appendChild(card);
-        });
-      } catch (e) {
-        console.error("Widget creation error:", e);
-        document.getElementById("cards").innerHTML = `
-          <div class="col-span-full bg-red-900/30 border border-red-500 rounded-3xl p-8 text-center">
-            <p class="text-red-400">Error loading widgets.</p>
-            <p class="text-sm text-gray-400 mt-2">Please refresh the page.</p>
-          </div>`;
-      }
+        card.innerHTML = `
+          <div class="uppercase tracking-widest text-xs sm:text-sm font-medium text-${item.color}-400">${item.label}</div>
+          <div id="val-${item.code}" class="widget-value mt-4 sm:mt-6">${item.value}</div>
+          <div class="text-xs mt-2" id="unit-${item.code}">${item.unit}</div>
+          <div class="tooltip">${item.tooltip}</div>
+        `;
+        container.appendChild(card);
+      });
     }
 
     async function updateDashboard() {
+      console.log("Updating dashboard...");
       await fetchLivePrices();
       createWidgets();
+      console.log("Dashboard updated. BTC:", btcPrice);
     }
 
     async function init() {
@@ -237,6 +226,7 @@
 
     init();
 
+    // Update every 5 minutes
     setInterval(updateDashboard, 300000);
   </script>
 </body>
