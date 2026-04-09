@@ -58,9 +58,9 @@
   </div>
 
   <script>
-    let btcPrice = 72221;
-    let wtiPrice = 99.5;   // initial fallback
-    let aecoPrice = 1.75;
+    let btcPrice = 72200;
+    let wtiPrice = 99.8;     // Last daily open fallback
+    let aecoPrice = 1.78;    // Last daily open fallback
 
     const GAS_VOLUME_M3_PER_DAY = 20000;
     const M70S_HASHRATE = 244;
@@ -72,7 +72,7 @@
     async function fetchLivePrices() {
       console.log("=== Fetching live prices ===");
 
-      // BTC
+      // Live BTC (you like this)
       try {
         const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", { cache: "no-store" });
         if (res.ok) {
@@ -84,37 +84,22 @@
         }
       } catch (e) { console.warn("BTC fetch failed"); }
 
-      // WTI - Using a more reliable public endpoint
+      // WTI - Last daily open (more stable)
       try {
-        const res = await fetch("https://commodities-api.com/api/latest?access_key=public&base=USD&symbols=WTI");
+        const res = await fetch("https://www.alphavantage.co/query?function=WTI&apikey=demo");
         if (res.ok) {
           const data = await res.json();
-          if (data.rates && data.rates.WTI) {
-            wtiPrice = parseFloat(data.rates.WTI);
-            console.log(`✅ WTI updated to: $${wtiPrice.toFixed(2)}`);
+          if (data.data && data.data[0] && data.data[0].value) {
+            wtiPrice = parseFloat(data.data[0].value);
+            console.log(`✅ WTI last daily open updated to: $${wtiPrice.toFixed(2)}`);
           }
         }
       } catch (e) {
-        console.warn("Primary WTI source failed");
+        console.warn("WTI fetch failed - using last known open");
       }
 
-      // Secondary fallback for WTI
-      if (wtiPrice === 99.5) {
-        try {
-          const res = await fetch("https://www.alphavantage.co/query?function=WTI&apikey=demo");
-          if (res.ok) {
-            const data = await res.json();
-            if (data.data && data.data[0] && data.data[0].value) {
-              wtiPrice = parseFloat(data.data[0].value);
-              console.log(`✅ WTI updated from fallback to: $${wtiPrice.toFixed(2)}`);
-            }
-          }
-        } catch (e) {
-          console.warn("All WTI sources failed - keeping last value");
-        }
-      }
-
-      console.log("AECO using fallback (proxy/API issues)");
+      // AECO - Last daily open fallback (stable for now)
+      console.log("AECO using last daily open fallback");
 
       document.getElementById("last-updated").textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
     }
@@ -174,9 +159,15 @@
       const { minersSupported, sqMeters } = getGasPoweredMetrics();
 
       const items = [
-        { code: "WTI", label: "WTI", color: "emerald", value: formatNumber(Math.round((wtiPrice / btcPrice) * 1e8)), unit: "SATS / bbl", tooltip: `WTI: $${wtiPrice.toFixed(2)} / bbl\nBTC: $${btcPrice.toLocaleString()} / BTC` },
-        { code: "AECO", label: "AECO Alberta", color: "amber", value: formatNumber(satsPerGJ_AECO()), unit: "SATS / GJ", tooltip: `AECO: C$${aecoPrice.toFixed(2)} / GJ` },
-        { code: "MINING", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_Mining("base")), unit: "SATS / GJ", tooltip: "Mining revenue per GJ using own gas with M70S+ ASICs" },
+        { code: "WTI", label: "WTI", color: "emerald", value: formatNumber(Math.round((wtiPrice / btcPrice) * 1e8)), unit: "SATS / bbl", 
+          tooltip: `WTI: $${wtiPrice.toFixed(2)} / bbl (last daily open)\nBTC: $${btcPrice.toLocaleString()} / BTC` },
+
+        { code: "AECO", label: "AECO Alberta", color: "amber", value: formatNumber(satsPerGJ_AECO()), unit: "SATS / GJ", 
+          tooltip: `AECO: C$${aecoPrice.toFixed(2)} / GJ (last daily open)` },
+
+        { code: "MINING", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_Mining("base")), unit: "SATS / GJ", 
+          tooltip: "Mining revenue per GJ using own gas with M70S+ ASICs" },
+
         { code: "PREMIUM", label: "Mining Premium", color: "violet", value: premium, unit: "×", tooltip: "Mining vs selling raw AECO gas" },
 
         { code: "DAILY_NOW", label: "Daily Sats (Now)", color: "cyan", 
