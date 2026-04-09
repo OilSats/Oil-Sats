@@ -44,9 +44,9 @@
       opacity: 1;
     }
 
-    /* Orange color for all SATS units */
+    /* Orange for all SATS units */
     .sats-unit {
-      color: #f97316; /* orange-500 */
+      color: #f97316;
       font-weight: 500;
     }
   </style>
@@ -170,12 +170,12 @@
 
         { code: "DAILY_NOW", label: "Daily Sats (Now)", color: "cyan", 
           value: `${formatNumber(bearNow.totalDailySats)}   ${formatNumber(baseNow.totalDailySats)}   ${formatNumber(bullNow.totalDailySats)}`, 
-          unit: `<span class="sats-unit">SATS / DAY</span>`, 
+          unit: `<span class="sats-unit">SATS/day (Bear / Base / Bull)</span>`, 
           tooltip: "Daily sats using 20 e³m³/d • Pre-halving" },
 
         { code: "DAILY_POST", label: "Daily Sats (Post 2028)", color: "purple", 
           value: `${formatNumber(bearPost.totalDailySats)}   ${formatNumber(basePost.totalDailySats)}   ${formatNumber(bullPost.totalDailySats)}`, 
-          unit: `<span class="sats-unit">SATS / DAY</span>`, 
+          unit: `<span class="sats-unit">SATS/day (Bear / Base / Bull)</span>`, 
           tooltip: "Daily sats using 20 e³m³/d • After 2028 halving" },
 
         { code: "INVESTMENT", label: "Base Investment", color: "rose", value: formatCAD(16500000), unit: "CAD", tooltip: "ASICs + generators + infrastructure" },
@@ -183,8 +183,8 @@
         { code: "TOTAL_INVEST", label: "Total Investment", color: "red", value: formatCAD(TOTAL_INVEST_CAD), unit: "CAD", tooltip: "Full project cost" },
 
         { code: "PAYBACK", label: "Payback Period", color: "lime", 
-          value: `${bearNow.paybackMonths}   ${baseNow.paybackMonths}   ${bullNow.paybackMonths}`, 
-          unit: "Bear     Base     Bull (months)", 
+          value: `${bearNow.paybackMonths} / ${baseNow.paybackMonths} / ${bullNow.paybackMonths}`, 
+          unit: "Bear / Base / Bull (months)", 
           tooltip: `Time to recover C$${TOTAL_INVEST_CAD.toLocaleString()} at $${btcPrice.toLocaleString()} USD/BTC` }
       ];
 
@@ -198,7 +198,7 @@
         card.innerHTML = `
           <div class="uppercase tracking-widest text-xs sm:text-sm font-medium text-${item.color}-400">${item.label}</div>
           <div id="val-${item.code}" class="widget-value mt-4 sm:mt-6">${item.value}</div>
-          <div class="text-xs text-gray-400 mt-2 sats-unit">${item.unit}</div>
+          <div class="text-xs sats-unit mt-2" id="unit-${item.code}">${item.unit}</div>
           <div class="tooltip">${item.tooltip}</div>
         `;
         container.appendChild(card);
