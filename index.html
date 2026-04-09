@@ -44,17 +44,8 @@
       opacity: 1;
     }
 
-    /* Orange for SATS units */
-    .sats-unit {
-      color: #f97316;
-      font-weight: 500;
-    }
-
-    /* Rose for CAD units and related investment widgets */
-    .cad-unit {
-      color: #f87171;
-      font-weight: 500;
-    }
+    .sats-unit { color: #f97316; font-weight: 500; }
+    .cad-unit  { color: #f87171; font-weight: 500; }
   </style>
 </head>
 <body class="bg-[#0a0a0a] text-white min-h-screen">
@@ -153,9 +144,6 @@
       return { totalDailySats, paybackMonths };
     }
 
-    function formatNumber(num) { return (num || 0).toLocaleString('en-US'); }
-    function formatCAD(num) { return 'C$' + num.toLocaleString('en-US'); }
-
     function createWidgets() {
       const bearNow = getSetupMetrics("bear", false);
       const baseNow = getSetupMetrics("base", false);
@@ -166,6 +154,13 @@
       const bullPost = getSetupMetrics("bull", true);
 
       const premium = (satsPerGJ_Mining("base") / satsPerGJ_AECO()).toFixed(1) || "—";
+
+      // Space calculation for 20 e³m³/d
+      const totalGJperDay = GAS_VOLUME_M3_PER_DAY * 0.0353;
+      const minersNeeded = Math.round(totalGJperDay / (M70S_POWER_KW * 24 / 277.8));
+      const containers = Math.ceil(minersNeeded / 260);           // 260 miners per 40ft container
+      const spaceM2 = Math.round(containers * 110);               // ~110 m² per container with spacing
+      const spaceAcres = (spaceM2 / 4046.86).toFixed(1);
 
       const items = [
         { code: "WTI", label: "WTI", color: "emerald", value: formatNumber(Math.round((wtiPrice / btcPrice) * 1e8)), unit: "SATS / bbl", tooltip: `WTI: $${wtiPrice.toFixed(2)} / bbl\nBTC: $${btcPrice.toLocaleString()} / BTC` },
@@ -186,6 +181,11 @@
         { code: "INVESTMENT", label: "Base Investment", color: "rose", value: formatCAD(16500000), unit: `<span class="cad-unit">CAD</span>`, tooltip: "ASICs + generators + infrastructure" },
         { code: "SOUND", label: "Sound Mitigation", color: "rose", value: formatCAD(3850000), unit: `<span class="cad-unit">CAD</span>`, tooltip: "To ~40 dBA" },
         { code: "TOTAL_INVEST", label: "Total Investment", color: "rose", value: formatCAD(TOTAL_INVEST_CAD), unit: `<span class="cad-unit">CAD</span>`, tooltip: "Full project cost" },
+
+        { code: "SPACE", label: "Space Required", color: "teal", 
+          value: `${containers} × 40ft`, 
+          unit: `<span class="cad-unit">${spaceM2} m² (${spaceAcres} acres)</span>`, 
+          tooltip: `Space for ~${minersNeeded} M70S+ miners` },
 
         { code: "PAYBACK", label: "Payback Period", color: "lime", 
           value: `${bearNow.paybackMonths} / ${baseNow.paybackMonths} / ${bullNow.paybackMonths}`, 
