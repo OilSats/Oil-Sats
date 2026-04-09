@@ -40,6 +40,7 @@
 
     .sats-unit { color: #f97316; font-weight: 500; }
     .cad-unit  { color: #f87171; font-weight: 500; }
+    .footprint-unit { color: #4ade80; font-weight: 500; }
 
     .refresh-btn {
       transition: all 0.2s ease;
@@ -80,6 +81,9 @@
     const M70S_POWER_KW = 3.14;
     const TOTAL_INVEST_CAD = 20350000;
 
+    // Footprint constants
+    const MINERS_PER_40FT_CONTAINER = 250;   // Realistic average for air-cooled M70S+ with proper racking & ventilation
+
     const CORS_PROXY = "https://corsproxy.io/?";
     const OIL_API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a";
 
@@ -88,22 +92,16 @@
     }
 
     async function fetchLivePrices() {
-      console.log("Fetching live prices...");
-
-      // BTC - direct from CoinGecko (more reliable)
+      // BTC
       try {
-        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
+        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", { cache: "no-store" });
         if (res.ok) {
           const data = await res.json();
-          if (data.bitcoin?.usd) {
-            btcPrice = Math.round(data.bitcoin.usd);
-          }
+          if (data.bitcoin?.usd) btcPrice = Math.round(data.bitcoin.usd);
         }
-      } catch (e) {
-        console.warn("BTC fetch failed, using fallback");
-      }
+      } catch (e) { console.warn("BTC fetch failed"); }
 
-      // WTI
+      // WTI + AECO (unchanged)
       try {
         const res = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=WTI_USD`), {
           headers: { "Authorization": `Token ${OIL_API_KEY}` }
@@ -112,11 +110,8 @@
           const data = await res.json();
           if (data.data?.price) wtiPrice = parseFloat(data.data.price);
         }
-      } catch (e) {
-        console.warn("WTI fetch failed");
-      }
+      } catch (e) { console.warn("WTI fetch failed"); }
 
-      // AECO
       try {
         const codes = ["AECO", "AECO_CAD"];
         for (let code of codes) {
@@ -127,14 +122,11 @@
             const data = await res.json();
             if (data.data?.price) {
               aecoPrice = parseFloat(data.data.price);
-              console.log("AECO updated to:", aecoPrice);
               break;
             }
           }
         }
-      } catch (e) {
-        console.warn("AECO fetch failed");
-      }
+      } catch (e) { console.warn("AECO fetch failed"); }
 
       document.getElementById("last-updated").textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
     }
@@ -172,6 +164,14 @@
       return { totalDailySats, paybackMonths };
     }
 
+    // === Footprint Calculation: Space required for ASICs powered by 20 e³m³/d ===
+    function getFootprintContainers() {
+      const totalPowerAvailableKW = 20000 * 0.0353 * (1000 / 277.8); // kW from gas (rough conversion via energy content)
+      const minersSupported = Math.floor(totalPowerAvailableKW / M70S_POWER_KW);
+      const containersNeeded = (minersSupported / MINERS_PER_40FT_CONTAINER).toFixed(1);
+      return { minersSupported, containersNeeded };
+    }
+
     function formatNumber(num) { return (num || 0).toLocaleString('en-US'); }
     function formatCAD(num) { return 'C$' + num.toLocaleString('en-US'); }
 
@@ -185,12 +185,19 @@
       const bullPost = getSetupMetrics("bull", true);
 
       const premium = (satsPerGJ_Mining("base") / satsPerGJ_AECO()).toFixed(1) || "—";
+      const footprint = getFootprintContainers();
 
       const items = [
         { code: "WTI", label: "WTI", color: "emerald", value: formatNumber(Math.round((wtiPrice / btcPrice) * 1e8)), unit: "SATS / bbl", tooltip: `WTI: $${wtiPrice.toFixed(2)} / bbl\nBTC: $${btcPrice.toLocaleString()} / BTC` },
         { code: "AECO", label: "AECO Alberta", color: "amber", value: formatNumber(satsPerGJ_AECO()), unit: "SATS / GJ", tooltip: `AECO: C$${aecoPrice.toFixed(2)} / GJ` },
         { code: "MINING", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_Mining("base")), unit: "SATS / GJ", tooltip: "Mining revenue per GJ using own gas" },
         { code: "PREMIUM", label: "Mining Premium", color: "violet", value: premium, unit: "×", tooltip: "Mining vs selling raw AECO gas" },
+
+        // Footprint widget (physical space)
+        { code: "FOOTPRINT", label: "Physical Footprint", color: "emerald", 
+          value: footprint.containersNeeded, 
+          unit: `<span class="footprint-unit">× 40ft containers</span>`, 
+          tooltip: `Requires space for ${formatNumber(footprint.minersSupported)} M70S+ miners\n(≈ ${MINERS_PER_40FT_CONTAINER} miners per standard 40ft mining container)` },
 
         { code: "DAILY_NOW", label: "Daily Sats (Now)", color: "cyan", 
           value: `${formatNumber(bearNow.totalDailySats)}   ${formatNumber(baseNow.totalDailySats)}   ${formatNumber(bullNow.totalDailySats)}`, 
@@ -239,7 +246,6 @@
 
       btn.style.opacity = "1";
       btn.style.pointerEvents = "auto";
-      console.log("Dashboard updated → BTC:", btcPrice, "AECO:", aecoPrice);
     }
 
     function manualRefresh() {
@@ -251,8 +257,6 @@
     }
 
     init();
-
-    // Auto-refresh every 5 minutes
     setInterval(updateDashboard, 300000);
   </script>
 </body>
