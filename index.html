@@ -44,17 +44,8 @@
       opacity: 1;
     }
 
-    /* Orange for SATS units */
-    .sats-unit {
-      color: #f97316;
-      font-weight: 500;
-    }
-
-    /* Light red for CAD units */
-    .cad-unit {
-      color: #f87171;
-      font-weight: 500;
-    }
+    .sats-unit { color: #f97316; font-weight: 500; }
+    .cad-unit  { color: #f87171; font-weight: 500; }
   </style>
 </head>
 <body class="bg-[#0a0a0a] text-white min-h-screen">
@@ -68,7 +59,6 @@
   </div>
 
   <script>
-    // Last known values (fallback)
     let btcPrice = 71325;
     let wtiPrice = 94;
     let aecoPrice = 2.80;
@@ -86,6 +76,7 @@
     }
 
     async function fetchLivePrices() {
+      // BTC
       try {
         const res = await fetch(getProxiedUrl("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"));
         if (res.ok) {
@@ -94,6 +85,7 @@
         }
       } catch (e) {}
 
+      // WTI
       try {
         const res = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=WTI_USD`), {
           headers: { "Authorization": `Token ${OIL_API_KEY}` }
@@ -104,6 +96,7 @@
         }
       } catch (e) {}
 
+      // AECO
       try {
         const codes = ["AECO", "AECO_CAD"];
         for (let code of codes) {
@@ -142,7 +135,7 @@
     }
 
     function getSetupMetrics(scenario, isPostHalving = false) {
-      const gjPerDay = GAS_VOLUME_M3_PER_DAY * 0.0353;
+      const gjPerDay = GAS_VOLUME_M3_PER_DAY * 0.0353;   // accurate Alberta conversion
       const satsPerGJ = satsPerGJ_Mining(scenario, isPostHalving);
       const totalDailySats = Math.round(satsPerGJ * gjPerDay);
 
@@ -168,6 +161,12 @@
 
       const premium = (satsPerGJ_Mining("base") / satsPerGJ_AECO()).toFixed(1) || "—";
 
+      // Space calculation
+      const miners = Math.round(20000 * 0.0353 / (M70S_POWER_KW * 24 / 277.8));
+      const containers = Math.ceil(miners / 260);   // 260 miners per 40ft container
+      const spaceM2 = Math.round(containers * 110); // ~110 m² per container incl. spacing
+      const spaceAcres = (spaceM2 / 4046.86).toFixed(2);
+
       const items = [
         { code: "WTI", label: "WTI", color: "emerald", value: formatNumber(Math.round((wtiPrice / btcPrice) * 1e8)), unit: "SATS / bbl", tooltip: `WTI: $${wtiPrice.toFixed(2)} / bbl\nBTC: $${btcPrice.toLocaleString()} / BTC` },
         { code: "AECO", label: "AECO Alberta", color: "amber", value: formatNumber(satsPerGJ_AECO()), unit: "SATS / GJ", tooltip: `AECO: C$${aecoPrice.toFixed(2)} / GJ` },
@@ -185,8 +184,13 @@
           tooltip: "Daily sats using 20 e³m³/d • After 2028 halving" },
 
         { code: "INVESTMENT", label: "Base Investment", color: "rose", value: formatCAD(16500000), unit: `<span class="cad-unit">CAD</span>`, tooltip: "ASICs + generators + infrastructure" },
-        { code: "SOUND", label: "Sound Mitigation", color: "rose", value: formatCAD(3850000), unit: `<span class="cad-unit">CAD</span>`, tooltip: "To ~40 dBA" },
-        { code: "TOTAL_INVEST", label: "Total Investment", color: "rose", value: formatCAD(TOTAL_INVEST_CAD), unit: `<span class="cad-unit">CAD</span>`, tooltip: "Full project cost" },
+        { code: "SOUND", label: "Sound Mitigation", color: "orange", value: formatCAD(3850000), unit: `<span class="cad-unit">CAD</span>`, tooltip: "To ~40 dBA" },
+        { code: "TOTAL_INVEST", label: "Total Investment", color: "red", value: formatCAD(TOTAL_INVEST_CAD), unit: `<span class="cad-unit">CAD</span>`, tooltip: "Full project cost" },
+
+        { code: "SPACE", label: "Space Required", color: "teal", 
+          value: `${containers} × 40ft`, 
+          unit: `<span class="cad-unit">${spaceM2} m² (${spaceAcres} acres)</span>`, 
+          tooltip: "Air-cooled containers for 2,602 M70S+ miners" },
 
         { code: "PAYBACK", label: "Payback Period", color: "lime", 
           value: `${bearNow.paybackMonths} / ${baseNow.paybackMonths} / ${bullNow.paybackMonths}`, 
@@ -221,7 +225,6 @@
     }
 
     init();
-
     setInterval(updateDashboard, 300000);
   </script>
 </body>
