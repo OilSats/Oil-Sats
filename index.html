@@ -91,33 +91,41 @@
     }
 
     async function fetchLivePrices() {
+      console.log("Fetching live prices...");
+
+      // BTC
       try {
         const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", { cache: "no-store" });
         if (res.ok) {
           const data = await res.json();
           if (data.bitcoin?.usd) btcPrice = Math.round(data.bitcoin.usd);
         }
-      } catch (e) {}
+      } catch (e) { console.warn("BTC fetch failed"); }
 
+      // WTI - Primary: Your OilPriceAPI (more reliable for commodities)
+      let wtiUpdated = false;
       try {
-        const res = await fetch("https://www.alphavantage.co/query?function=WTI&apikey=demo");
+        const res = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=WTI_USD`), {
+          headers: { "Authorization": `Token ${OIL_API_KEY}` }
+        });
         if (res.ok) {
           const data = await res.json();
-          if (data.data && data.data[0] && data.data[0].value) wtiPrice = parseFloat(data.data[0].value);
-        }
-      } catch (e) {}
-      if (!wtiPrice || wtiPrice < 50) {
-        try {
-          const res = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=WTI_USD`), {
-            headers: { "Authorization": `Token ${OIL_API_KEY}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.data?.price) wtiPrice = parseFloat(data.data.price);
+          console.log("WTI API response:", data);
+          if (data.data?.price) {
+            wtiPrice = parseFloat(data.data.price);
+            wtiUpdated = true;
+            console.log(`✅ WTI updated to: $${wtiPrice.toFixed(2)}`);
           }
-        } catch (e) {}
+        }
+      } catch (e) {
+        console.warn("Primary WTI fetch failed");
       }
 
+      if (!wtiUpdated) {
+        console.warn("⚠️ WTI using fallback value");
+      }
+
+      // AECO
       try {
         const codes = ["AECO", "AECO_CAD"];
         for (let code of codes) {
@@ -132,7 +140,7 @@
             }
           }
         }
-      } catch (e) {}
+      } catch (e) { console.warn("AECO fetch failed"); }
 
       document.getElementById("last-updated").textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
     }
@@ -207,7 +215,6 @@
           unit: `<span class="sats-unit">SATS/day (Bear / Base / Bull)</span>`, 
           tooltip: "Daily sats using 20 e³m³/d • After 2028 halving" },
 
-        // Updated Base Investment with detailed tooltip
         { code: "INVESTMENT", label: "Base Investment (Conservative)", color: "rose", 
           value: formatCAD(15800000), 
           unit: `<span class="cad-unit">CAD</span>`, 
@@ -259,6 +266,7 @@
 
       btn.style.opacity = "1";
       btn.style.pointerEvents = "auto";
+      console.log(`Dashboard updated → WTI: $${wtiPrice.toFixed(2)} | AECO: C$${aecoPrice.toFixed(2)} | BTC: $${btcPrice}`);
     }
 
     function manualRefresh() {
@@ -270,7 +278,7 @@
     }
 
     init();
-    setInterval(updateDashboard, 300000);
+    setInterval(updateDashboard, 300000); // every 5 minutes
   </script>
 </body>
 </html>
