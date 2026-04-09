@@ -29,6 +29,8 @@
       box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
       margin-bottom: 10px;
       white-space: pre-line;
+      width: max-content;
+      max-width: 280px;
     }
     .widget-card:hover .tooltip,
     .widget-card:active .tooltip {
@@ -38,14 +40,29 @@
 
     .sats-unit { color: #f97316; font-weight: 500; }
     .cad-unit  { color: #f87171; font-weight: 500; }
+
+    .refresh-btn {
+      transition: all 0.2s ease;
+    }
+    .refresh-btn:hover {
+      transform: rotate(180deg);
+    }
   </style>
 </head>
 <body class="bg-[#0a0a0a] text-white min-h-screen">
 
   <div class="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-    <div class="text-center text-gray-500 text-xs mb-2">
-      Version 2026-04-09 • Live Prices
+    <div class="flex items-center justify-between mb-2">
+      <div class="text-center text-gray-500 text-xs">
+        Version 2026-04-09 • Live Prices
+      </div>
+      <button onclick="manualRefresh()" id="refresh-btn"
+        class="refresh-btn flex items-center gap-2 text-gray-400 hover:text-white text-xs px-4 py-2 rounded-2xl hover:bg-gray-900 transition-colors">
+        <span>↻</span>
+        <span>Refresh</span>
+      </button>
     </div>
+
     <div id="last-updated" class="text-center text-gray-500 text-xs mb-6">
       Last updated: never
     </div>
@@ -54,9 +71,9 @@
   </div>
 
   <script>
-    let btcPrice = 71325;
-    let wtiPrice = 94;
-    let aecoPrice = 2.80;
+    let btcPrice = 71000;
+    let wtiPrice = 96;
+    let aecoPrice = 2.50;
 
     const GAS_VOLUME_M3_PER_DAY = 20000;
     const M70S_HASHRATE = 244;
@@ -73,18 +90,17 @@
     async function fetchLivePrices() {
       console.log("Fetching live prices...");
 
-      // BTC
+      // BTC - direct from CoinGecko (more reliable)
       try {
-        const res = await fetch(getProxiedUrl("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"));
+        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
         if (res.ok) {
           const data = await res.json();
           if (data.bitcoin?.usd) {
             btcPrice = Math.round(data.bitcoin.usd);
-            console.log("BTC updated to:", btcPrice);
           }
         }
       } catch (e) {
-        console.log("BTC fetch failed");
+        console.warn("BTC fetch failed, using fallback");
       }
 
       // WTI
@@ -97,7 +113,7 @@
           if (data.data?.price) wtiPrice = parseFloat(data.data.price);
         }
       } catch (e) {
-        console.log("WTI fetch failed");
+        console.warn("WTI fetch failed");
       }
 
       // AECO
@@ -117,10 +133,10 @@
           }
         }
       } catch (e) {
-        console.log("AECO fetch failed");
+        console.warn("AECO fetch failed");
       }
 
-      document.getElementById("last-updated").textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+      document.getElementById("last-updated").textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
     }
 
     function dailySatsMinedPerUnit(scenario, isPostHalving = false) {
@@ -214,10 +230,20 @@
     }
 
     async function updateDashboard() {
-      console.log("Updating dashboard...");
+      const btn = document.getElementById("refresh-btn");
+      btn.style.opacity = "0.5";
+      btn.style.pointerEvents = "none";
+
       await fetchLivePrices();
       createWidgets();
-      console.log("Dashboard updated. BTC:", btcPrice);
+
+      btn.style.opacity = "1";
+      btn.style.pointerEvents = "auto";
+      console.log("Dashboard updated → BTC:", btcPrice, "AECO:", aecoPrice);
+    }
+
+    function manualRefresh() {
+      updateDashboard();
     }
 
     async function init() {
@@ -226,7 +252,7 @@
 
     init();
 
-    // Update every 5 minutes
+    // Auto-refresh every 5 minutes
     setInterval(updateDashboard, 300000);
   </script>
 </body>
