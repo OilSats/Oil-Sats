@@ -55,7 +55,7 @@
   <div class="max-w-6xl mx-auto px-4 sm:px-6 py-8">
     <div class="flex items-center justify-between mb-2">
       <div class="text-center text-gray-500 text-xs">
-        Version 2026-04-09 • Sour Gas Turbines • Conservative Estimates
+        Version 2026-04-09 • Sour Gas Turbines • Conservative Estimates • BTC Power Law R² = 0.955
       </div>
       <button onclick="manualRefresh()" id="refresh-btn"
         class="refresh-btn flex items-center gap-2 text-gray-400 hover:text-white text-xs px-4 py-2 rounded-2xl hover:bg-gray-900 transition-colors">
@@ -110,20 +110,18 @@
         });
         if (res.ok) {
           const data = await res.json();
-          console.log("WTI Health API full response:", data);
-          
           const wtiData = data.metrics?.commodity_health?.WTI_USD;
           if (wtiData && wtiData.latest_price) {
-            wtiPrice = wtiData.latest_price / 100;   // Convert cents to dollars
+            wtiPrice = wtiData.latest_price / 100;
             wtiUpdated = true;
-            console.log(`✅ WTI updated from health endpoint to: $${wtiPrice.toFixed(2)}`);
+            console.log(`✅ WTI updated to: $${wtiPrice.toFixed(2)}`);
           }
         }
       } catch (e) {
         console.warn("Health endpoint WTI fetch failed");
       }
 
-      // Fallback to prices/latest if health fails
+      // Fallback
       if (!wtiUpdated) {
         try {
           const res = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=WTI_USD`), {
@@ -133,17 +131,12 @@
             const data = await res.json();
             if (data.data?.price) {
               wtiPrice = parseFloat(data.data.price);
-              wtiUpdated = true;
-              console.log(`✅ WTI updated from prices/latest to: $${wtiPrice.toFixed(2)}`);
+              console.log(`✅ WTI updated from fallback to: $${wtiPrice.toFixed(2)}`);
             }
           }
         } catch (e) {
-          console.warn("Fallback WTI fetch also failed");
+          console.warn("All WTI sources failed");
         }
-      }
-
-      if (!wtiUpdated) {
-        console.warn("⚠️ WTI using fallback value ($97)");
       }
 
       // AECO
@@ -223,18 +216,25 @@
       const items = [
         { code: "WTI", label: "WTI", color: "emerald", value: formatNumber(Math.round((wtiPrice / btcPrice) * 1e8)), unit: "SATS / bbl", tooltip: `WTI: $${wtiPrice.toFixed(2)} / bbl\nBTC: $${btcPrice.toLocaleString()} / BTC` },
         { code: "AECO", label: "AECO Alberta", color: "amber", value: formatNumber(satsPerGJ_AECO()), unit: "SATS / GJ", tooltip: `AECO: C$${aecoPrice.toFixed(2)} / GJ` },
-        { code: "MINING", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_Mining("base")), unit: "SATS / GJ", tooltip: "Mining revenue per GJ using own gas" },
+        
+        // Mining Revenue now mentions M70S+
+        { code: "MINING", label: "M70S+ Mining Revenue", color: "sky", 
+          value: formatNumber(satsPerGJ_Mining("base")), 
+          unit: "SATS / GJ", 
+          tooltip: "Mining revenue per GJ using own gas with M70S+ ASICs" },
+
         { code: "PREMIUM", label: "Mining Premium", color: "violet", value: premium, unit: "×", tooltip: "Mining vs selling raw AECO gas" },
 
+        // Daily Sats tooltips now mention M70S+
         { code: "DAILY_NOW", label: "Daily Sats (Now)", color: "cyan", 
           value: `${formatNumber(bearNow.totalDailySats)}   ${formatNumber(baseNow.totalDailySats)}   ${formatNumber(bullNow.totalDailySats)}`, 
           unit: `<span class="sats-unit">SATS/day (Bear / Base / Bull)</span>`, 
-          tooltip: "Daily sats using 20 e³m³/d • Pre-halving" },
+          tooltip: "Daily sats using 20 e³m³/d gas • M70S+ ASICs • Pre-halving" },
 
         { code: "DAILY_POST", label: "Daily Sats (Post 2028)", color: "purple", 
           value: `${formatNumber(bearPost.totalDailySats)}   ${formatNumber(basePost.totalDailySats)}   ${formatNumber(bullPost.totalDailySats)}`, 
           unit: `<span class="sats-unit">SATS/day (Bear / Base / Bull)</span>`, 
-          tooltip: "Daily sats using 20 e³m³/d • After 2028 halving" },
+          tooltip: "Daily sats using 20 e³m³/d gas • M70S+ ASICs • After 2028 halving" },
 
         { code: "INVESTMENT", label: "Base Investment (Conservative)", color: "rose", 
           value: formatCAD(15800000), 
@@ -299,7 +299,7 @@
     }
 
     init();
-    setInterval(updateDashboard, 300000); // every 5 minutes
+    setInterval(updateDashboard, 300000);
   </script>
 </body>
 </html>
