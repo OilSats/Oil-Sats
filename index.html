@@ -49,20 +49,22 @@
 
   <div class="max-w-6xl mx-auto px-4 sm:px-6 py-8">
     <div class="text-center text-gray-500 text-xs mb-6">
-      Version 2026-04-09 • Live Prices with Fallbacks • AECO + M70S+
+      Version 2026-04-09 • Live Prices with Fallbacks
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-6" id="cards"></div>
   </div>
 
   <script>
-    // Persistent last known values (fallback)
+    // Persistent last known values
     let btcPrice = 71325;
     let wtiPrice = 94;
     let aecoPrice = 2.80;   // CAD/GJ
 
+    // Constants
     const GAS_VOLUME_M3_PER_DAY = 20000;
     const M70S_HASHRATE = 244;
+    const M70S_POWER_KW = 3.14;
     const TOTAL_INVEST_CAD = 20350000;
 
     const CORS_PROXY = "https://corsproxy.io/?";
@@ -80,7 +82,7 @@
           const data = await res.json();
           if (data.bitcoin?.usd) btcPrice = Math.round(data.bitcoin.usd);
         }
-      } catch (e) { console.log("BTC fetch failed - using last known"); }
+      } catch (e) { console.log("BTC fetch failed"); }
 
       // WTI
       try {
@@ -91,11 +93,11 @@
           const data = await res.json();
           if (data.data?.price) wtiPrice = parseFloat(data.data.price);
         }
-      } catch (e) { console.log("WTI fetch failed - using last known"); }
+      } catch (e) { console.log("WTI fetch failed"); }
 
-      // AECO - try multiple codes
+      // AECO
       try {
-        let codes = ["AECO", "AECO_CAD", "AECO_USD"];
+        const codes = ["AECO", "AECO_CAD"];
         for (let code of codes) {
           const res = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}`), {
             headers: { "Authorization": `Token ${OIL_API_KEY}` }
@@ -108,7 +110,7 @@
             }
           }
         }
-      } catch (e) { console.log("AECO fetch failed - using last known"); }
+      } catch (e) { console.log("AECO fetch failed"); }
     }
 
     function satsPerGJ_AECO() {
