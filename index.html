@@ -69,7 +69,7 @@
 
     const SQM_PER_MINER = 0.12;
 
-    const CORS_PROXY = "https://corsproxy.io/?";
+    const CORS_PROXY = "https://api.allorigins.win/get?url=";
     const OIL_API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a";
 
     function getProxiedUrl(url) {
@@ -88,15 +88,16 @@
         }
       } catch (e) { console.warn("BTC fetch failed"); }
 
-      // WTI - Primary: Health endpoint (recommended by OilPriceAPI)
+      // WTI
       let wtiUpdated = false;
       try {
         const res = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/health`), {
           headers: { "Authorization": `Token ${OIL_API_KEY}` }
         });
         if (res.ok) {
-          const data = await res.json();
-          console.log("WTI Health API full response:", data);
+          const json = await res.json();
+          const data = json.contents ? JSON.parse(json.contents) : json;
+          console.log("WTI Health API response:", data);
           
           const wtiData = data.metrics?.commodity_health?.WTI_USD;
           if (wtiData && wtiData.latest_price) {
@@ -109,14 +110,14 @@
         console.warn("WTI health endpoint failed");
       }
 
-      // Fallback to prices/latest
       if (!wtiUpdated) {
         try {
           const res = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=WTI_USD`), {
             headers: { "Authorization": `Token ${OIL_API_KEY}` }
           });
           if (res.ok) {
-            const data = await res.json();
+            const json = await res.json();
+            const data = json.contents ? JSON.parse(json.contents) : json;
             console.log("WTI prices/latest response:", data);
             if (data.data?.price) {
               wtiPrice = parseFloat(data.data.price);
@@ -130,7 +131,7 @@
       }
 
       if (!wtiUpdated) {
-        console.warn("⚠️ WTI still stuck at fallback value ($97). API may be delayed or returning stale data.");
+        console.warn("⚠️ WTI still at fallback value ($97). We are experiencing CORS proxy problems.");
       }
 
       // AECO
@@ -141,7 +142,8 @@
             headers: { "Authorization": `Token ${OIL_API_KEY}` }
           });
           if (res.ok) {
-            const data = await res.json();
+            const json = await res.json();
+            const data = json.contents ? JSON.parse(json.contents) : json;
             if (data.data?.price) {
               aecoPrice = parseFloat(data.data.price);
               break;
