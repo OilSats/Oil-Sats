@@ -58,8 +58,8 @@
   </div>
 
   <script>
-    let btcPrice = 72212;
-    let wtiPrice = 99.5;   // realistic current fallback
+    let btcPrice = 72221;
+    let wtiPrice = 99.5;   // initial fallback
     let aecoPrice = 1.75;
 
     const GAS_VOLUME_M3_PER_DAY = 20000;
@@ -72,7 +72,7 @@
     async function fetchLivePrices() {
       console.log("=== Fetching live prices ===");
 
-      // BTC - direct (working)
+      // BTC
       try {
         const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", { cache: "no-store" });
         if (res.ok) {
@@ -84,23 +84,37 @@
         }
       } catch (e) { console.warn("BTC fetch failed"); }
 
-      // WTI - using a public source that doesn't require proxy or key
+      // WTI - Using a more reliable public endpoint
       try {
-        const res = await fetch("https://www.alphavantage.co/query?function=WTI&apikey=demo");
+        const res = await fetch("https://commodities-api.com/api/latest?access_key=public&base=USD&symbols=WTI");
         if (res.ok) {
           const data = await res.json();
-          if (data.data && data.data[0] && data.data[0].value) {
-            wtiPrice = parseFloat(data.data[0].value);
+          if (data.rates && data.rates.WTI) {
+            wtiPrice = parseFloat(data.rates.WTI);
             console.log(`✅ WTI updated to: $${wtiPrice.toFixed(2)}`);
           }
         }
       } catch (e) {
-        console.warn("Alpha Vantage WTI failed, keeping current value");
+        console.warn("Primary WTI source failed");
       }
 
-      // AECO - fallback to a public estimate for now (since proxy is blocking)
-      // We'll keep it static until we find a stable solution
-      console.log("AECO using fallback (proxy issues)");
+      // Secondary fallback for WTI
+      if (wtiPrice === 99.5) {
+        try {
+          const res = await fetch("https://www.alphavantage.co/query?function=WTI&apikey=demo");
+          if (res.ok) {
+            const data = await res.json();
+            if (data.data && data.data[0] && data.data[0].value) {
+              wtiPrice = parseFloat(data.data[0].value);
+              console.log(`✅ WTI updated from fallback to: $${wtiPrice.toFixed(2)}`);
+            }
+          }
+        } catch (e) {
+          console.warn("All WTI sources failed - keeping last value");
+        }
+      }
+
+      console.log("AECO using fallback (proxy/API issues)");
 
       document.getElementById("last-updated").textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
     }
