@@ -74,7 +74,6 @@
     }
 
     async function fetchLivePrices() {
-      // BTC
       try {
         const res = await fetch(getProxiedUrl("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"));
         if (res.ok) {
@@ -83,7 +82,6 @@
         }
       } catch (e) {}
 
-      // WTI
       try {
         const res = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=WTI_USD`), {
           headers: { "Authorization": `Token ${OIL_API_KEY}` }
@@ -94,7 +92,6 @@
         }
       } catch (e) {}
 
-      // AECO
       try {
         const codes = ["AECO", "AECO_CAD"];
         for (let code of codes) {
@@ -112,16 +109,12 @@
       } catch (e) {}
     }
 
-    // Power Law Scenarios
     function dailySatsMinedPerUnit(scenario, isPostHalving = false) {
-      let baseSatsPerTH = 475;
-      if (scenario === "bear") baseSatsPerTH = 400;
-      if (scenario === "bull") baseSatsPerTH = 550;
-
-      if (isPostHalving) {
-        baseSatsPerTH = Math.round(baseSatsPerTH * 0.55);   // Conservative post-halving
-      }
-      return Math.round(M70S_HASHRATE * baseSatsPerTH);
+      let base = 475;
+      if (scenario === "bear") base = 400;
+      if (scenario === "bull") base = 550;
+      if (isPostHalving) base = Math.round(base * 0.55);
+      return Math.round(M70S_HASHRATE * base);
     }
 
     function satsPerGJ_AECO() {
@@ -166,20 +159,26 @@
       const items = [
         { code: "WTI", label: "WTI", color: "emerald", value: formatNumber(Math.round((wtiPrice / btcPrice) * 1e8)), unit: "SATS / bbl", tooltip: `WTI: $${wtiPrice.toFixed(2)} / bbl\nBTC: $${btcPrice.toLocaleString()} / BTC` },
         { code: "AECO", label: "AECO Alberta", color: "amber", value: formatNumber(satsPerGJ_AECO()), unit: "SATS / GJ", tooltip: `AECO: C$${aecoPrice.toFixed(2)} / GJ` },
-        { code: "MINING", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_Mining("base")), unit: "SATS / GJ", tooltip: "Base case mining revenue per GJ" },
+        { code: "MINING", label: "M70S+ Mining Revenue", color: "sky", value: formatNumber(satsPerGJ_Mining("base")), unit: "SATS / GJ", tooltip: "Mining revenue per GJ using own gas" },
         { code: "PREMIUM", label: "Mining Premium", color: "violet", value: premium, unit: "×", tooltip: "Mining vs selling raw AECO gas" },
 
         { code: "DAILY_NOW", label: "Daily Sats (Now)", color: "cyan", 
-          value: `${formatNumber(bearNow.totalDailySats)} / ${formatNumber(baseNow.totalDailySats)} / ${formatNumber(bullNow.totalDailySats)}`, 
-          unit: "Bear / Base / Bull", tooltip: "Pre-halving" },
+          value: `${formatNumber(bearNow.totalDailySats)}   ${formatNumber(baseNow.totalDailySats)}   ${formatNumber(bullNow.totalDailySats)}`, 
+          unit: "Bear     Base     Bull", 
+          tooltip: "Daily sats using 20 e³m³/d • Pre-halving" },
 
         { code: "DAILY_POST", label: "Daily Sats (Post 2028)", color: "purple", 
-          value: `${formatNumber(bearPost.totalDailySats)} / ${formatNumber(basePost.totalDailySats)} / ${formatNumber(bullPost.totalDailySats)}`, 
-          unit: "Bear / Base / Bull", tooltip: "After 2028 halving" },
+          value: `${formatNumber(bearPost.totalDailySats)}   ${formatNumber(basePost.totalDailySats)}   ${formatNumber(bullPost.totalDailySats)}`, 
+          unit: "Bear     Base     Bull", 
+          tooltip: "Daily sats using 20 e³m³/d • After 2028 halving" },
+
+        { code: "INVESTMENT", label: "Base Investment", color: "rose", value: formatCAD(16500000), unit: "CAD", tooltip: "ASICs + generators + infrastructure" },
+        { code: "SOUND", label: "Sound Mitigation", color: "orange", value: formatCAD(3850000), unit: "CAD", tooltip: "To ~40 dBA" },
+        { code: "TOTAL_INVEST", label: "Total Investment", color: "red", value: formatCAD(TOTAL_INVEST_CAD), unit: "CAD", tooltip: "Full project cost" },
 
         { code: "PAYBACK", label: "Payback Period", color: "lime", 
-          value: `${bearNow.paybackMonths} / ${baseNow.paybackMonths} / ${bullNow.paybackMonths}`, 
-          unit: "Bear / Base / Bull (months)", 
+          value: `${bearNow.paybackMonths}   ${baseNow.paybackMonths}   ${bullNow.paybackMonths}`, 
+          unit: "Bear     Base     Bull (months)", 
           tooltip: `Time to recover C$${TOTAL_INVEST_CAD.toLocaleString()} at $${btcPrice.toLocaleString()} USD/BTC` }
       ];
 
@@ -211,7 +210,6 @@
 
     init();
 
-    // Update every 5 minutes
     setInterval(updateDashboard, 300000);
   </script>
 </body>
