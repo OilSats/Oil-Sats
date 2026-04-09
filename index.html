@@ -58,9 +58,9 @@
   </div>
 
   <script>
-    let btcPrice = 71995;
-    let wtiPrice = 99;
-    let aecoPrice = 1.80;
+    let btcPrice = 72212;
+    let wtiPrice = 99.5;   // realistic current fallback
+    let aecoPrice = 1.75;
 
     const GAS_VOLUME_M3_PER_DAY = 20000;
     const M70S_HASHRATE = 244;
@@ -69,20 +69,12 @@
 
     const SQM_PER_MINER = 0.12;
 
-    // Using a different proxy that handles Authorization headers better
-    const CORS_PROXY = "https://corsproxy.io/?";
-    const OIL_API_KEY = "73ed5b5c00864cffaa2cb8233760c7293487d624522af084fddb958fa1a2183a";
-
-    function getProxiedUrl(url) {
-      return CORS_PROXY + encodeURIComponent(url);
-    }
-
     async function fetchLivePrices() {
       console.log("=== Fetching live prices ===");
 
-      // BTC - direct call (most reliable)
+      // BTC - direct (working)
       try {
-        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
+        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", { cache: "no-store" });
         if (res.ok) {
           const data = await res.json();
           if (data.bitcoin?.usd) {
@@ -90,80 +82,29 @@
             console.log(`✅ BTC updated to: $${btcPrice}`);
           }
         }
-      } catch (e) {
-        console.warn("BTC fetch failed");
-      }
+      } catch (e) { console.warn("BTC fetch failed"); }
 
-      // WTI
-      let wtiUpdated = false;
+      // WTI - using a public source that doesn't require proxy or key
       try {
-        const res = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/health`), {
-          headers: { "Authorization": `Token ${OIL_API_KEY}` }
-        });
+        const res = await fetch("https://www.alphavantage.co/query?function=WTI&apikey=demo");
         if (res.ok) {
-          const json = await res.json();
-          const data = json.contents ? JSON.parse(json.contents) : json;
-          console.log("WTI Health response:", data);
-          
-          const wtiData = data.metrics?.commodity_health?.WTI_USD;
-          if (wtiData?.latest_price) {
-            wtiPrice = wtiData.latest_price / 100;
-            wtiUpdated = true;
-            console.log(`✅ WTI updated (health) to: $${wtiPrice.toFixed(2)}`);
+          const data = await res.json();
+          if (data.data && data.data[0] && data.data[0].value) {
+            wtiPrice = parseFloat(data.data[0].value);
+            console.log(`✅ WTI updated to: $${wtiPrice.toFixed(2)}`);
           }
         }
       } catch (e) {
-        console.warn("WTI health endpoint failed");
+        console.warn("Alpha Vantage WTI failed, keeping current value");
       }
 
-      if (!wtiUpdated) {
-        try {
-          const res = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=WTI_USD`), {
-            headers: { "Authorization": `Token ${OIL_API_KEY}` }
-          });
-          if (res.ok) {
-            const json = await res.json();
-            const data = json.contents ? JSON.parse(json.contents) : json;
-            if (data.data?.price) {
-              wtiPrice = parseFloat(data.data.price);
-              wtiUpdated = true;
-              console.log(`✅ WTI updated (prices/latest) to: $${wtiPrice.toFixed(2)}`);
-            }
-          }
-        } catch (e) {
-          console.warn("WTI fallback also failed");
-        }
-      }
-
-      if (!wtiUpdated) {
-        console.warn("⚠️ WTI still using fallback ($97). We are still having proxy issues.");
-      }
-
-      // AECO
-      try {
-        const codes = ["AECO", "AECO_CAD"];
-        for (let code of codes) {
-          const res = await fetch(getProxiedUrl(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${code}`), {
-            headers: { "Authorization": `Token ${OIL_API_KEY}` }
-          });
-          if (res.ok) {
-            const json = await res.json();
-            const data = json.contents ? JSON.parse(json.contents) : json;
-            if (data.data?.price) {
-              aecoPrice = parseFloat(data.data.price);
-              console.log(`✅ AECO updated to: C$${aecoPrice.toFixed(2)}`);
-              break;
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("AECO fetch failed");
-      }
+      // AECO - fallback to a public estimate for now (since proxy is blocking)
+      // We'll keep it static until we find a stable solution
+      console.log("AECO using fallback (proxy issues)");
 
       document.getElementById("last-updated").textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
     }
 
-    // The rest of your functions (unchanged)
     function getGasPoweredMetrics() {
       const gjPerDay = GAS_VOLUME_M3_PER_DAY * 0.0353;
       const totalPowerKW = (gjPerDay * 1000) / 277.8;
